@@ -61,7 +61,7 @@ int connect_client() {
     return client_socket;
 }
 
-int main(void)
+int main(void) //This is a test.
 {
     int client_socket = connect_client();
     if (client_socket < 0) {
