@@ -38,6 +38,7 @@ char* next_token(char** tokenizer, message_status* status) {
  **/
 
 message_status parse_create_tbl(char* create_arguments) {
+    cs165_log(stdout, "Parsing CreateTBL = %s\n", create_arguments);
     message_status status = OK_DONE;
     char** create_arguments_index = &create_arguments;
     char* table_name = next_token(create_arguments_index, &status);
@@ -59,7 +60,10 @@ message_status parse_create_tbl(char* create_arguments) {
     }
     // replace the ')' with a null terminating character. 
     col_cnt[last_char] = '\0';
-
+    if (current_db == NULL) {
+        cs165_log(stdout, "Can't create a table without having loaded a DB!\n");
+        return EXECUTION_ERROR;
+    }
     // check that the database argument is the current active database
     if (strcmp(current_db->name, db_name) != 0) {
         cs165_log(stdout, "query unsupported. Bad db name");
@@ -87,6 +91,7 @@ message_status parse_create_tbl(char* create_arguments) {
  **/
 
 message_status parse_create_db(char* create_arguments) {
+    cs165_log(stdout, "Parsing CreateDB = %s\n", create_arguments);
     char *token;
     token = strsep(&create_arguments, ",");
     // not enough arguments if token is NULL
@@ -120,6 +125,7 @@ message_status parse_create_db(char* create_arguments) {
  * parse_create parses a create statement and then passes the necessary arguments off to the next function
  **/
 message_status parse_create(char* create_arguments) {
+    cs165_log(stdout, "Parsing Create = %s\n", create_arguments);
     message_status mes_status;
     char *tokenizer_copy, *to_free;
     // Since strsep destroys input, we create a copy of our input. 
