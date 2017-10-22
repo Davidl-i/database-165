@@ -36,7 +36,7 @@
  **/
 char* execute_DbOperator(DbOperator* query) {
     free(query);
-    return "165";
+    return "Fuck you";
 }
 
 /**
@@ -80,8 +80,14 @@ void handle_client(int client_socket) {
             // 1. Parse command
             DbOperator* query = parse_command(recv_message.payload, &send_message, client_socket, client_context);
 
-            // 2. Handle request
-            char* result = execute_DbOperator(query);
+            char* result;
+            if(send_message.status == OK_WAIT_FOR_RESPONSE){
+                // 2. Handle request
+                result = execute_DbOperator(query);      
+            }else{
+                free(query);
+                result = "";
+            }
 
             send_message.length = strlen(result);
             char send_buffer[send_message.length + 1];
@@ -93,11 +99,12 @@ void handle_client(int client_socket) {
                 log_err("Failed to send message.");
                 exit(1);
             }
-
-            // 4. Send response of request
-            if (send(client_socket, result, send_message.length, 0) == -1) {
-                log_err("Failed to send message.");
-                exit(1);
+            if(send_message.status == OK_WAIT_FOR_RESPONSE){
+                // 4. Send response of request
+                if (send(client_socket, result, send_message.length, 0) == -1) {
+                    log_err("Failed to send message.");
+                    exit(1);
+                }          
             }
         }
     } while (!done);

@@ -72,7 +72,7 @@ typedef struct Column {
  *     within a database, but tables from different databases can have the same
  *     name.
  * - col_count, the number of columns in the table
- * - col,umns this is the pointer to an array of columns contained in the table.
+ * - columns this is the pointer to an array of columns contained in the table.
  * - table_length, the size of the columns in the table.
  **/
 
@@ -80,6 +80,7 @@ typedef struct Table {
     char name [MAX_SIZE_NAME];
     Column *columns;
     size_t col_count;
+    size_t num_loaded_cols; //How many columns have been added to this table, up to a max of col_count
     size_t table_length;
 } Table;
 
@@ -105,8 +106,19 @@ typedef struct Db {
 typedef enum StatusCode {
   /* The operation completed successfully */
   OK,
-  /* There was an error with the call. */
+  /* General error code*/
   ERROR,
+  //Null pointer passed in
+  NULLPOINTER, 
+  //Name Invalid or too long
+  NAMEPROBLEM,
+  //Created thing already exists!
+  CREATED_ALREADY_EXISTS,
+  //Resource does not exist
+  RESOURCE_NOT_EXIST,
+  //No more room for new resource
+  NO_MORE_ROOM,
+
 } StatusCode;
 
 // status declares an error code and associated message

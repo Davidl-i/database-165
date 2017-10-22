@@ -32,6 +32,41 @@ char* next_token(char** tokenizer, message_status* status) {
     return token;
 }
 
+message_status parse_create_col(char* create_arguments) {
+    cs165_log(stdout, "Parsing CreateCol = %s\n", create_arguments);
+    message_status status = OK_DONE;
+    char** create_arguments_index = &create_arguments;
+    char* col_name = next_token(create_arguments_index, &status);
+    char* where_put = next_token(create_arguments_index, &status);
+    // not enough arguments
+    if (status == INCORRECT_FORMAT) {
+        return status;
+    }
+    col_name = trim_quotes(col_name);
+
+    int last_char = strlen(where_put) - 1;
+    if (where_put[last_char] != ')') {
+        return INCORRECT_FORMAT;
+    }
+    // replace the ')' with a null terminating character. 
+    where_put[last_char] = '\0';
+    Table* target;
+    target = lookup_table(where_put);
+    if(target == NULL){
+        log_err("Targeted table not found! \n");
+        return OBJECT_NOT_FOUND;
+    }
+    cs165_log(stdout, "Object was found! \n");
+
+    Status create_status;
+    create_column(col_name, target, false, &create_status);  
+    if (create_status.code != OK) {
+        log_err("Adding a column failed: %s\n", create_status.error_message);
+        return EXECUTION_ERROR;
+    }
+    return status;
+}
+
 /**
  * This method takes in a string representing the arguments to create a table.
  * It parses those arguments, checks that they are valid, and creates a table.
@@ -61,15 +96,14 @@ message_status parse_create_tbl(char* create_arguments) {
     // replace the ')' with a null terminating character. 
     col_cnt[last_char] = '\0';
     if (current_db == NULL) {
-        cs165_log(stdout, "Can't create a table without having loaded a DB!\n");
+        log_err("Can't create a table without having loaded a DB!\n");
         return EXECUTION_ERROR;
     }
     // check that the database argument is the current active database
-    if (strcmp(current_db->name, db_name) != 0) {
-        cs165_log(stdout, "query unsupported. Bad db name");
+    if (strcmp(current_db->name, db_name) != 0) {                                        //TODO: support multiple databases
+        log_err("query unsupported. Bad db name\n");
         return QUERY_UNSUPPORTED;
     }
-
     // turn the string column count into an integer, and check that the input is valid.
     int column_cnt = atoi(col_cnt);
     if (column_cnt < 1) {
@@ -78,10 +112,9 @@ message_status parse_create_tbl(char* create_arguments) {
     Status create_status;
     create_table(current_db, table_name, column_cnt, &create_status);
     if (create_status.code != OK) {
-        cs165_log(stdout, "adding a table failed.");
+        log_err("Adding a table failed: %s\n", create_status.error_message);
         return EXECUTION_ERROR;
     }
-
     return status;
 }
 
@@ -113,9 +146,11 @@ message_status parse_create_db(char* create_arguments) {
         if (token != NULL) {
             return INCORRECT_FORMAT;
         }
-        if (add_db(db_name, true).code == OK) {
+        Status create_status = add_db(db_name, true);
+        if (create_status.code == OK) {
             return OK_DONE;
         } else {
+            log_err("Error encountered: %s\n", create_status.error_message);
             return EXECUTION_ERROR;
         }
     }
@@ -145,6 +180,8 @@ message_status parse_create(char* create_arguments) {
                 mes_status = parse_create_db(tokenizer_copy);
             } else if (strcmp(token, "tbl") == 0) {
                 mes_status = parse_create_tbl(tokenizer_copy);
+            } else if (strcmp(token, "col") == 0) {
+                mes_status = parse_create_col(tokenizer_copy);
             } else {
                 mes_status = UNKNOWN_COMMAND;
             }

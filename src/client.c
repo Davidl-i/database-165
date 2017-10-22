@@ -30,6 +30,7 @@ machine please look into this as a a source of error. */
 
 #define DEFAULT_STDIN_BUFFER_SIZE 1024
 
+const char* MESSAGE_EXPLANATION[] = { "OK_DONE", "OK_WAIT_FOR_RESPONSE", "UNKNOWN_COMMAND", "QUERY_UNSUPPORTED", "OBJECT_ALREADY_EXISTS", "OBJECT_NOT_FOUND", "INCORRECT_FORMAT", "EXECUTION_ERROR", "INCORRECT_FILE_FORMAT", "FILE_NOT_FOUND", "INDEX_ALREADY_EXISTS"};
 /**
  * connect_client()
  *
@@ -114,20 +115,19 @@ int main(void) //This is a test.
 
             // Always wait for server response (even if it is just an OK message)
             if ((len = recv(client_socket, &(recv_message), sizeof(message), 0)) > 0) {
-                if ((recv_message.status == OK_WAIT_FOR_RESPONSE || recv_message.status == OK_DONE) &&
-                    (int) recv_message.length > 0) {
+                printf("Received status code is %s\n", MESSAGE_EXPLANATION[recv_message.status]);
+                if ((recv_message.status == OK_WAIT_FOR_RESPONSE) && (int) recv_message.length > 0) {
+                    printf("|____");
                     // Calculate number of bytes in response package
                     int num_bytes = (int) recv_message.length;
                     char payload[num_bytes + 1];
-
                     // Receive the payload and print it out
                     if ((len = recv(client_socket, payload, num_bytes, 0)) > 0) {
                         payload[num_bytes] = '\0';
-                        printf("%s\n", payload);
+                        printf("Response: %s\n", payload);  
                     }
                 }
-            }
-            else {
+            } else {
                 if (len < 0) {
                     log_err("Failed to receive message.");
                 }
@@ -137,6 +137,7 @@ int main(void) //This is a test.
                 exit(1);
             }
         }
+        printf("Looping back \n");
     }
     close(client_socket);
     return 0;

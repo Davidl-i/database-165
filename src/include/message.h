@@ -17,6 +17,8 @@ typedef enum message_status {
     INDEX_ALREADY_EXISTS
 } message_status;
 
+extern const char* MESSAGE_EXPLANATION[];
+
 // message is a single packet of information sent between client/server.
 // message_status: defines the status of the message.
 // length: defines the length of the string message to be sent.
