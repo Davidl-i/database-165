@@ -95,14 +95,19 @@ message_status parse_create_tbl(char* create_arguments) {
     }
     // replace the ')' with a null terminating character. 
     col_cnt[last_char] = '\0';
-    if (current_db == NULL) {
-        log_err("Can't create a table without having loaded a DB!\n");
-        return EXECUTION_ERROR;
-    }
-    // check that the database argument is the current active database
-    if (strcmp(current_db->name, db_name) != 0) {                                        //TODO: support multiple databases
-        log_err("query unsupported. Bad db name\n");
-        return QUERY_UNSUPPORTED;
+    // if (current_db == NULL) {
+    //     log_err("Can't create a table without having loaded a DB!\n");
+    //     return EXECUTION_ERROR;
+    // }
+    // // check that the database argument is the current active database
+    // if (strcmp(current_db->name, db_name) != 0) {                                        //TODO: support multiple databases
+    //     log_err("query unsupported. Bad db name\n");
+    //     return QUERY_UNSUPPORTED;
+    // }
+    Status res = add_db(db_name, false);
+    if(res.code != OK){
+        log_err("Error from add_db: %s\n", res.error_message);
+        return OBJECT_NOT_FOUND;
     }
     // turn the string column count into an integer, and check that the input is valid.
     int column_cnt = atoi(col_cnt);

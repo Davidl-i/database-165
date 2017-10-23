@@ -56,6 +56,7 @@ client: client.o utils.o
 
 server: server.o parse.o utils.o db_manager.o client_context.o
 	$(CC) $(CFLAGS) $(DEPCFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+#	rm *.dat
 
 clean:
 	rm -f client server *.o *~ *.bak core *.core cs165_unix_socket

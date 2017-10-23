@@ -203,23 +203,23 @@ void shutdown_server(){
         if(sync_status.code != OK){
             log_err("ERROR IN SHUTDOWN SYNC: %s\n", sync_status.error_message); //Oh well.
         }
-        shutdown_database();
+        shutdown_database(current_db);
     }
 
 //Also shut down client context if any. Will need to do this recursively though.
 }
 
-void shutdown_database(){ //Closes out current database
-    for(size_t i = 0; i < current_db->tables_size; i++){
-        Table curr_tbl = current_db->tables[i];
+void shutdown_database(Db* db){ //Closes out current database
+    for(size_t i = 0; i < db->tables_size; i++){
+        Table curr_tbl = db->tables[i];
         for(size_t j = 0; j < curr_tbl.col_count; j++){
             Column curr_col = curr_tbl.columns[j];
             free(curr_col.data);
         }
         free(curr_tbl.columns);
     }
-    free(current_db->tables);
-    free(current_db);
+    free(db->tables);
+    free(db);
 }
 
 // Currently this main will setup the socket and accept a single client.

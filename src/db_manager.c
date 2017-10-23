@@ -3,6 +3,7 @@
 #include "utils.h"
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdio.h> //Buffered files; remove if not using buffered files.
 
 // In this class, there will always be only one active database at a time
 Db *current_db = NULL;
@@ -227,40 +228,166 @@ Status add_db(const char* db_name, bool new) {
 		ret_status.error_message = "Database name too long!";
 		return ret_status;
 	}
+	if(current_db != NULL && strcmp(current_db->name, db_name) == 0){ //Nothing to be done.
+		if(new){
+			ret_status.code = CREATED_ALREADY_EXISTS;
+			ret_status.error_message = "Attempted to create a new DB, but it already exists on RAM!";
+			return ret_status;
+		}else{
+			ret_status.code = OK; 
+			return ret_status;
+		}
+	}
+	char* file_extension = ".dat"; 
+	char* db_file = (char*) malloc(sizeof(char) * (1 + strlen(file_extension) + strlen(db_name)) );
+	strcpy(db_file, db_name);
+	strcat(db_file, file_extension);
+	if( access( db_file , F_OK ) != -1 && new ) {	//when creating a new db, make sure it does not already exist on backing storage!
+		free(db_file);
+		ret_status.code = CREATED_ALREADY_EXISTS;
+		ret_status.error_message = "Attempted to create a new DB, but it already exists on disk!";
+		return ret_status;
+	} 
+	if( access( db_file , F_OK ) == -1 && !new) {	//when creating a new db, make sure it does not already exist on backing storage!
+		free(db_file);
+		ret_status.code = RESOURCE_NOT_EXIST;
+		ret_status.error_message = "Trying to bring up a DB from disk, but it doesn't exist!";
+		return ret_status;
+	} 
 
-	//when creating a new db, make sure it does not already exist on backing storage!
-
+	Db* new_db = (Db*) malloc(sizeof(Db));
+	strcpy((new_db->name), db_name);
 	if(new){
-		//If loading is successful, then unload old one, otherwise, keep.
-		Db* new_db = (Db*) malloc(sizeof(Db));
-		// memcpy(&(new_db->name), db_name, strlen(db_name));
-		// (new_db->name)[strlen(db_name)] = '\0'; //gotta null terminate!
-		strcpy((new_db->name), db_name);
-
+		free(db_file); //No need for this anymore.
 		new_db->tables_size = 0;
 		new_db->tables_capacity = PAGE_SIZE / sizeof(Table);
 		new_db->tables = (Table*) malloc(PAGE_SIZE);
 		cs165_log(stdout, "DB NAME: %s made Size: %i, Table capacity %i\n", new_db->name, new_db->tables_size, new_db->tables_capacity);
-		//sync_db();
-		current_db = new_db;
 	} else{
-		//run db_load from disk
+		FILE* db_fp = fopen(db_file, "r");
+		free(db_file);
 
-		if(current_db == NULL){
-			ret_status.code = ERROR;                 //This will have to be replaced once can be loaded from disk.
-			ret_status.error_message = "Getting db from disk no yet implemented! \n";
-			return ret_status;
-		}
+		char db_linebuf[256];
 
-		if(strcmp(current_db->name, db_name) == 0){
-			ret_status.code = OK;
-			return ret_status;
+		size_t num_tables = 0;
+		while(fgets(db_linebuf, sizeof(db_linebuf), db_fp)){
+			if(strlen(db_linebuf) <= 1){
+				continue;
+			}
+			num_tables ++;
 		}
-		ret_status.code = ERROR;
-		ret_status.error_message = "Loading databases from disk not yet supported!";
-		return ret_status;
+		cs165_log(stdout, "There are %i tables\n", num_tables);
+		new_db->tables_size = num_tables;
+		new_db->tables_capacity =  (PAGE_SIZE * ((num_tables * sizeof(Table)) / PAGE_SIZE + (PAGE_SIZE%(num_tables * sizeof(Table)) == 0 ? 0:1))) / sizeof(Table);
+		cs165_log(stdout, "Capacity of %i tables\n", new_db->tables_capacity);
+		new_db->tables = (Table*) malloc(PAGE_SIZE * ((num_tables * sizeof(Table)) / PAGE_SIZE + (PAGE_SIZE%(num_tables * sizeof(Table)) == 0 ? 0:1)));
+
+		rewind(db_fp);
+		size_t table_pointer = 0;
+		while(fgets(db_linebuf, sizeof(db_linebuf), db_fp)){
+			if(strlen(db_linebuf) <= 1){
+				continue;
+			}
+			trim_whitespace(db_linebuf);
+			char* tbl_file = (char*) malloc(sizeof(char) * (2 + strlen(file_extension) + strlen(db_name) + strlen(db_linebuf)) );
+			sprintf(tbl_file, "%s.%s%s", db_name, db_linebuf, file_extension);
+			cs165_log(stdout, "file to get: %s\n", tbl_file);
+			FILE* tbl_fp = fopen(tbl_file, "r");
+			free(tbl_file);
+			if(tbl_fp == NULL){
+				fclose(db_fp);
+				free(new_db);
+				ret_status.code = IO_ERROR;
+				ret_status.error_message = "File linked to by the DB file not available!";
+			}
+			char tbl_linebuf[256];
+			size_t col_elems_since_last_label = 0;
+			size_t num_labels = 0;
+			while(fgets(tbl_linebuf, sizeof(tbl_linebuf), tbl_fp)){
+				if(strlen(tbl_linebuf) <= 1){
+					continue;
+				}
+				if(strncmp(tbl_linebuf, ">", 1) == 0){
+					num_labels ++;
+					col_elems_since_last_label = 0;
+				}else{
+					col_elems_since_last_label++;
+				}
+			}
+			cs165_log(stdout, "There are %i columns of %i size here\n", num_labels, col_elems_since_last_label);
+			Table new_table;
+			strcpy(new_table.name, db_linebuf);
+    		new_table.col_count = num_labels;
+    		new_table.num_loaded_cols = num_labels;
+    		new_table.table_length = col_elems_since_last_label;
+    		new_table.columns = (Column*) malloc(sizeof(Column) * num_labels);
+    		rewind(tbl_fp);
+
+    		int cur_col = -1;
+    		size_t cur_pos = 0; //position within column
+    		Column new_col;
+			while(fgets(tbl_linebuf, sizeof(tbl_linebuf), tbl_fp)){
+				if(strlen(tbl_linebuf) <= 1){
+					continue;
+				}
+				trim_whitespace(tbl_linebuf);
+				if(strncmp(tbl_linebuf, ">", 1) == 0){
+					if(cur_col != -1){
+						cs165_log(stdout, "Adding to table %s, column %s\n", new_table.name, new_col.name);
+						memcpy(&new_table.columns[cur_col], &new_col, sizeof(Column));
+					}
+					cur_col++;
+					cur_pos = 0;
+					memset(&new_col, 0, sizeof(Column));
+					strcpy(new_col.name, tbl_linebuf + 1);
+					new_col.index = NULL;
+					new_col.column_length = new_table.table_length;
+					new_col.data = (int*) calloc(new_table.table_length, sizeof(int));
+				}else{
+					new_col.data[cur_pos] = atoi(tbl_linebuf);
+					cur_pos ++;
+				}
+			}
+			if(cur_col != -1){
+				cs165_log(stdout, "Adding to table %s, column %s\n", new_table.name, new_col.name);
+				memcpy(&new_table.columns[cur_col], &new_col, sizeof(Column));
+			}
+			fclose(tbl_fp);
+			
+			cs165_log(stdout, "Adding to database %s, table %s\n", new_db->name, new_table.name);
+			memcpy(&new_db->tables[table_pointer], &new_table, sizeof(Table));
+			table_pointer ++;
+		}
+		fclose(db_fp);
+/*
+		cs165_log(stdout, "Database name %s\n", new_db->name);
+		for(size_t i = 0; i < new_db->tables_size; i++){
+	        Table curr_tbl = new_db->tables[i];
+			cs165_log(stdout, "Table name %s\n", curr_tbl.name);
+	        for(size_t j = 0; j < curr_tbl.col_count; j++){
+	            Column curr_col = curr_tbl.columns[j];
+	            cs165_log(stdout, "Column name %s, which consists of these:\n", curr_col.name);
+	            for(size_t k = 0; k < curr_tbl.table_length; k++){
+	            	cs165_log(stdout, "%i\n", curr_col.data[k]);
+	            }
+	        }
+	    }
+*/
 	}
 
+	//If loading is successful, then unload old one, otherwise, keep.
+	if(current_db != NULL){
+		Status sync_status = sync_db(current_db);
+		if(sync_status.code != OK){
+			log_err("Error from sync called inside add_db: %s\n", sync_status.error_message);
+			ret_status.code = sync_status.code;
+			ret_status.error_message = "Error in Syncing (See copied error code)";
+			free(new_db);
+			return ret_status;
+		}
+		shutdown_database(current_db); //Gets rid of all memory holding current_db
+	}
+	current_db = new_db;
 	ret_status.code = OK;
 	return ret_status;
 }
