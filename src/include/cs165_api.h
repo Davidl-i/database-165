@@ -185,9 +185,11 @@ typedef struct GeneralizedColumnHandle {
  * holds the information necessary to refer to generalized columns (results or columns)
  */
 typedef struct ClientContext {
-    GeneralizedColumnHandle* chandle_table;
-    int chandles_in_use;
-    int chandle_slots;
+    // GeneralizedColumnHandle* chandle_table;
+    // int chandles_in_use;
+    // int chandle_slots;
+  Column *columns;
+  size_t col_count;
 } ClientContext;
 
 /**
@@ -210,7 +212,18 @@ typedef enum OperatorType {
     CREATE,
     INSERT,
     OPEN,
+    SELECT,
 } OperatorType;
+
+typedef struct SelectOperator{
+    bool exists_lower;
+    bool exists_upper;
+    int lower;
+    int upper;
+    Column* column;
+    char* lval;
+} SelectOperator;
+
 /*
  * necessary fields for insertion
  */
@@ -230,6 +243,7 @@ typedef struct OpenOperator {
 typedef union OperatorFields {
     InsertOperator insert_operator;
     OpenOperator open_operator;
+    SelectOperator select_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:

@@ -30,6 +30,7 @@
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
 
+
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  * This should be replaced in your implementation (and its implementation possibly moved to a different file).
  * It is currently here so that you can verify that your server and client can send messages.
@@ -66,6 +67,48 @@ char* execute_DbOperator(DbOperator* query) {
         free(query);
         return "Done";
     }
+    if(query->type == SELECT){
+
+        Column* column = query->operator_fields.select_operator.column;
+        char* lval = query->operator_fields.select_operator.lval;
+        bool exists_lower = query->operator_fields.select_operator.exists_lower;
+        bool exists_upper = query->operator_fields.select_operator.exists_upper;
+        int lower = query->operator_fields.select_operator.lower;
+        int upper = query->operator_fields.select_operator.upper;
+
+        int* result = (int*) malloc(column->column_length * sizeof(int));
+        size_t result_index = 0;
+                    cs165_log(stdout,"%i\n", column->column_length);
+
+        for(size_t i = 0; i < column->column_length; i++){
+            if( (exists_upper && exists_lower && column->data[i] >= lower && column->data[i] < upper) || (exists_upper && !exists_lower && column->data[i] >= upper) ||  (!exists_upper && exists_lower && column->data[i] < lower) ||  (!exists_lower && !exists_upper) ){
+                cs165_log(stdout, "%i qualifies\n", column->data[i]);
+                result[result_index++] = i;
+            }
+        }
+                            cs165_log(stdout,"%i\n", result_index);
+
+        result = (int*) realloc(result, sizeof(int) * result_index);
+
+        Column* new_col = (Column*) malloc(sizeof(Column));
+        strcpy(new_col->name, lval);
+        new_col->data = result;
+        new_col->column_length = result_index;
+
+        if(client_context->col_count == 0){
+            client_context->columns = (Column*) malloc(sizeof(Column));
+            client_context->col_count++;
+        }else{
+            client_context->columns = (Column*) realloc(client_context->columns, sizeof(Column) * (client_context->col_count + 1));
+            client_context->col_count++;
+        }
+                            cs165_log(stdout,"Memcpying to the %ith element\n", client_context->col_count - 1);
+
+        memcpy( &client_context->columns[client_context->col_count - 1], new_col, sizeof(Column));
+
+        free(query);
+        return "Done";
+    }
 
     free(query);
     return "Error in execute_DbOperator";
@@ -89,7 +132,9 @@ void handle_client(int client_socket) {
     message recv_message;
 
     // create the client context here
-    ClientContext* client_context = NULL;
+    client_context = (ClientContext*) malloc(sizeof(ClientContext));
+    client_context->columns = NULL;
+    client_context->col_count = 0;
 
     // Continually receive messages from client and execute queries.
     // 1. Parse the command
