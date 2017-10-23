@@ -361,6 +361,9 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         query_command += 17;
         send_message->status = OK_WAIT_FOR_RESPONSE;
         dbo = parse_insert(query_command, send_message);
+    } else if (strncmp(query_command, "shutdown", 8) == 0) {
+        send_message->status = SHUTTING_DOWN;
+        dbo = malloc(sizeof(DbOperator));
     } else if (strncmp(query_command, "load:", 5) == 0) {
         query_command += 5;
         send_message->status = load_from_client(query_command);

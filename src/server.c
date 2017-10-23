@@ -118,7 +118,12 @@ void handle_client(int client_socket) {
             if(send_message.status == OK_WAIT_FOR_RESPONSE){
                 // 2. Handle request
                 result = execute_DbOperator(query);      
-            }else{
+            }else if(send_message.status == SHUTTING_DOWN){
+                free(query);
+                result = "";
+                shutdown_server();
+                done = 1;
+            } else{
                 free(query);
                 result = "";
             }
@@ -190,6 +195,31 @@ int setup_server() {
     }
 
     return server_socket;
+}
+
+void shutdown_server(){
+    if(current_db != NULL){
+        Status sync_status = sync_db(current_db);
+        if(sync_status.code != OK){
+            log_err("ERROR IN SHUTDOWN SYNC: %s\n", sync_status.error_message); //Oh well.
+        }
+        shutdown_database();
+    }
+
+//Also shut down client context if any. Will need to do this recursively though.
+}
+
+void shutdown_database(){ //Closes out current database
+    for(size_t i = 0; i < current_db->tables_size; i++){
+        Table curr_tbl = current_db->tables[i];
+        for(size_t j = 0; j < curr_tbl.col_count; j++){
+            Column curr_col = curr_tbl.columns[j];
+            free(curr_col.data);
+        }
+        free(curr_tbl.columns);
+    }
+    free(current_db->tables);
+    free(current_db);
 }
 
 // Currently this main will setup the socket and accept a single client.

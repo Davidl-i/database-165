@@ -14,7 +14,8 @@ typedef enum message_status {
     EXECUTION_ERROR,
     INCORRECT_FILE_FORMAT,
     FILE_NOT_FOUND,
-    INDEX_ALREADY_EXISTS
+    INDEX_ALREADY_EXISTS,
+    SHUTTING_DOWN,
 } message_status;
 
 extern const char* MESSAGE_EXPLANATION[];

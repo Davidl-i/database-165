@@ -2,6 +2,7 @@
 #include <string.h>
 #include "utils.h"
 #include <fcntl.h>
+#include <unistd.h>
 
 // In this class, there will always be only one active database at a time
 Db *current_db = NULL;
@@ -116,10 +117,88 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status *ret_st
 
 //Persists the DB on file
 Status sync_db(Db* db){
+	Status ret_status;
 	//Iterate over tables
 		//Iterate over columns
-	Status ret_status;
-	(void)db;
+	if(db == NULL){
+		ret_status.code = NULLPOINTER;
+		ret_status.error_message = "Db to sync is null.";
+		return ret_status;
+	}
+	char* file_extension = ".dat";
+	char* file_to_open = (char*) malloc(sizeof(char) * (1 + strlen(file_extension) + strlen(db->name)) );
+	strcpy(file_to_open, db->name);
+	strcat(file_to_open, file_extension);
+	cs165_log(stdout, "Opening Db file for writing: %s\n", file_to_open);
+	int db_fd = open(file_to_open, O_WRONLY | O_TRUNC | O_CREAT , 0666);
+	free(file_to_open);
+	if(db_fd < 0){
+		ret_status.code = IO_ERROR;
+		ret_status.error_message = "Cannot open database file to write to.";
+		return ret_status;
+	}
+
+	for(size_t i = 0; i < db->tables_size; i++){
+		Table cur_table = db->tables[i];
+		char* db_file_write_buffer = (char*) malloc(sizeof(char) * (strlen(cur_table.name) + 1));
+		strcpy(db_file_write_buffer, cur_table.name);
+		db_file_write_buffer[strlen(cur_table.name)] = '\n';
+		int res = write(db_fd, db_file_write_buffer, strlen(cur_table.name) + 1);
+		free(db_file_write_buffer);
+		if(res < 0){
+			close(db_fd);
+			ret_status.code = IO_ERROR;
+			ret_status.error_message = "Cannot write to DB file\n";
+			return ret_status;
+		}
+		char* tbl_file_to_open = (char*) malloc(sizeof(char) * (2 + strlen(file_extension) + strlen(db->name) + strlen(cur_table.name) ) );
+		strcpy(tbl_file_to_open, db->name);
+		strcat(tbl_file_to_open, ".");
+		strcat(tbl_file_to_open, cur_table.name);
+		strcat(tbl_file_to_open, file_extension);	
+		cs165_log(stdout, "Opening Table file for writing: %s\n", tbl_file_to_open);
+		int tbl_fd = open(tbl_file_to_open, O_WRONLY | O_TRUNC | O_CREAT , 0666);
+		free(tbl_file_to_open);
+		if(tbl_fd < 0){
+			close(db_fd);
+			ret_status.code = IO_ERROR;
+			ret_status.error_message = "Cannot open Table file to write to.";
+			return ret_status;
+		}
+		for(size_t j = 0; j < cur_table.col_count; j++){
+			Column cur_col = cur_table.columns[j];
+			char* wb = (char*) malloc(sizeof(char) * (strlen(cur_col.name) + 3) );
+			strcpy(wb,">");
+			strcat(wb, cur_col.name);
+			strcat(wb,"\n");
+			res = write(tbl_fd, wb, strlen(wb)); //Don't write the null terminator.
+			free(wb);
+			if(res < 0){
+				close(db_fd);
+				close(tbl_fd);
+				ret_status.code = IO_ERROR;
+				ret_status.error_message = "Cannot write to Tbl file\n";
+				return ret_status;
+			}
+			wb = (char*) calloc(20 , sizeof(char));
+			for(size_t k = 0; k < cur_table.table_length; k++){
+				sprintf(wb, "%i\n", cur_col.data[k]);
+				res = write(tbl_fd, wb, strlen(wb));
+				if(res < 0){
+					free(wb);
+					close(db_fd);
+					close(tbl_fd);
+					ret_status.code = IO_ERROR;
+					ret_status.error_message = "Cannot write an int to the Tbl file\n";
+					return ret_status;
+				}
+			}
+			free(wb);
+		}
+		close(tbl_fd);
+	}
+	close(db_fd);
+	ret_status.code = OK;
 	return ret_status;
 }
 

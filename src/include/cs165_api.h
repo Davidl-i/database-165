@@ -119,6 +119,8 @@ typedef enum StatusCode {
   RESOURCE_NOT_EXIST,
   //No more room for new resource
   NO_MORE_ROOM,
+  //IO Error
+  IO_ERROR,
 
 } StatusCode;
 
@@ -262,8 +264,8 @@ Table* create_table(Db* db, const char* name, size_t num_columns, Status *status
 
 Column* create_column(char *name, Table *table, bool sorted, Status *ret_status);
 
-Status shutdown_server();
-Status shutdown_database(Db* db);
+void shutdown_server();
+void shutdown_database();
 
 char** execute_db_operator(DbOperator* query);
 void db_operator_free(DbOperator* query);

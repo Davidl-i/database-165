@@ -31,7 +31,7 @@ machine please look into this as a a source of error. */
 
 #define DEFAULT_STDIN_BUFFER_SIZE 1024
 
-const char* MESSAGE_EXPLANATION[] = { "OK_DONE", "OK_WAIT_FOR_RESPONSE", "UNKNOWN_COMMAND", "QUERY_UNSUPPORTED", "OBJECT_ALREADY_EXISTS", "OBJECT_NOT_FOUND", "INCORRECT_FORMAT", "EXECUTION_ERROR", "INCORRECT_FILE_FORMAT", "FILE_NOT_FOUND", "INDEX_ALREADY_EXISTS"};
+const char* MESSAGE_EXPLANATION[] = { "OK_DONE", "OK_WAIT_FOR_RESPONSE", "UNKNOWN_COMMAND", "QUERY_UNSUPPORTED", "OBJECT_ALREADY_EXISTS", "OBJECT_NOT_FOUND", "INCORRECT_FORMAT", "EXECUTION_ERROR", "INCORRECT_FILE_FORMAT", "FILE_NOT_FOUND", "INDEX_ALREADY_EXISTS", "SHUTTING_DOWN"};
 /**
  * connect_client()
  *
@@ -176,6 +176,9 @@ int main(void)
                         payload[num_bytes] = '\0';
                         cs165_log(stdout, "Response: %s\n", payload);  
                     }
+                }
+                if(recv_message.status == SHUTTING_DOWN){
+                    break;
                 }
             } else {
                 if (len < 0) {
