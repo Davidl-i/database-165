@@ -55,6 +55,7 @@ struct Comparator;
 typedef struct Column {
     char name[MAX_SIZE_NAME]; 
     int* data;
+    size_t column_length;
     // You will implement column indexes later. 
     void* index;
     //struct ColumnIndex *index;

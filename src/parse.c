@@ -139,7 +139,7 @@ message_status parse_create_db(char* create_arguments) {
         if (last_char < 0 || db_name[last_char] != ')') {
             return INCORRECT_FORMAT;
         }
-        // replace final ')' with null-termination character.
+        // replace final ')' with null-termination character. 
         db_name[last_char] = '\0';
 
         token = strsep(&create_arguments, ",");
@@ -240,6 +240,82 @@ DbOperator* parse_insert(char* query_command, message* send_message) {
     }
 }
 
+message_status load_from_client(char* input){
+    char* token = NULL;
+    char** input_index = &input;
+    token = strsep(input_index, "\n");
+    if(token == NULL){
+        log_err("Load contents are null!\n");
+        return INCORRECT_FILE_FORMAT;
+    }
+    if(strlen(token) <= 1){
+        cs165_log(stdout, "advancing 1 token\n");
+        token = strsep(input_index, "\n");
+    }
+    if(token == NULL || strlen(token) <= 1){
+        log_err("Cannot find header!\n");
+        return INCORRECT_FORMAT;
+    }
+
+    cs165_log(stdout, "Header is %s\n", token);
+
+    char* header_copy = (char*) malloc(sizeof(char) * (strlen(token) + 1));
+    strcpy(header_copy, token);
+    char* col_token = NULL;
+    char** header_index = &header_copy; 
+    size_t n_cols = 0;
+    while ((col_token = strsep(header_index, ",")) != NULL) {
+        n_cols++;
+    }
+    cs165_log(stdout, "Header is of size %i\n", n_cols);
+    free(header_copy);
+
+    header_index = &token;
+    Table* tables[n_cols]; //Under the assumption only 1 DB referred to in csv. Should modify for multiple.
+    Column* columns[n_cols]; //Under the assumption only 1 DB referred to in csv. Should modify for multiple.
+    size_t n_cols_written = 0;
+    while ((col_token = strsep(header_index, ",")) != NULL) {
+        tables[n_cols_written] = lookup_table(col_token);
+        columns[n_cols_written] = lookup_column(col_token);
+        if(tables[n_cols_written] == NULL || columns[n_cols_written] == NULL){
+            log_err("Cannot look up the tables or columns referred to by the CSV\n");
+            return OBJECT_NOT_FOUND;
+        }
+        cs165_log(stdout, "table: %p, col:%p\n", tables[n_cols_written], columns[n_cols_written] );
+        n_cols_written++;
+    }
+
+    char* line_token = NULL;
+    char** line_index = &token;
+    size_t i = 0;
+
+    while ((token = strsep(input_index, "\n")) != NULL) {
+        if(strlen(token) == 0){
+            continue;
+        }
+        i = 0;
+        cs165_log(stdout, "token: %s\n", token);
+        while ((line_token = strsep(line_index, ",")) != NULL) {
+            cs165_log(stdout, "Writing %i to %s.%s\n", atoi(line_token), tables[i]->name, columns[i]->name);
+            if(columns[i]->column_length == 0){ //Do NOT realloc an array of size 0!
+                columns[i]->data = (int*) malloc(sizeof(int) * 1);
+            }else{
+                columns[i]->data = (int*) realloc(columns[i]->data, (sizeof(int) * (columns[i]->column_length + 1)));
+            }
+            columns[i]->data[columns[i]->column_length] = atoi(line_token);
+            columns[i]->column_length++;
+            cs165_log(stdout, "Column length %i, tables length %i\n", columns[i]->column_length, tables[i]->table_length);
+            if(columns[i]->column_length > tables[i]->table_length){
+                cs165_log(stdout, "Incrementing table length to %i\n", tables[i]->table_length + 1 );
+                tables[i]->table_length++;
+            }
+            i++;
+        }
+    }
+
+    return OK_DONE;
+}
+
 /**
  * parse_command takes as input the send_message from the client and then
  * parses it into the appropriate query. Stores into send_message the
@@ -255,7 +331,7 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         return NULL;
     }
 
-    char *equals_pointer = strchr(query_command, '=');
+    char *equals_pointer = strchr(query_command, '='); 
     char *handle = query_command;
     if (equals_pointer != NULL) {
         // handle exists, store here. 
@@ -266,10 +342,15 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         handle = NULL;
     }
 
-    cs165_log(stdout, "QUERY: %s\n", query_command);
+    cs165_log(stdout, "QUERY: %.30s\n", query_command);
 
-    send_message->status = OK_WAIT_FOR_RESPONSE;
-    query_command = trim_whitespace(query_command);
+    send_message->status = UNKNOWN_COMMAND;
+
+        if(strncmp(query_command, "load:", 5) != 0){                    //Such special treatment shouldn't be allowed, but for now, whatever.
+            query_command = trim_whitespace(query_command);             //Change for different packet structure
+        }
+    
+
     // check what command is given. 
     if (strncmp(query_command, "create", 6) == 0) {
         query_command += 6;
@@ -278,7 +359,12 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         dbo->type = CREATE;
     } else if (strncmp(query_command, "relational_insert", 17) == 0) {
         query_command += 17;
+        send_message->status = OK_WAIT_FOR_RESPONSE;
         dbo = parse_insert(query_command, send_message);
+    } else if (strncmp(query_command, "load:", 5) == 0) {
+        query_command += 5;
+        send_message->status = load_from_client(query_command);
+        dbo = malloc(sizeof(DbOperator));
     }
     if (dbo == NULL) {
         return dbo;

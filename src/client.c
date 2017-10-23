@@ -19,6 +19,7 @@ machine please look into this as a a source of error. */
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
+#include <fcntl.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -62,7 +63,43 @@ int connect_client() {
     return client_socket;
 }
 
-int main(void) //This is a test.
+char* get_file(char* cmd){
+    cs165_log(stdout, "cmd: %s\n", cmd);
+    char* cmd_parse = trim_whitespace(cmd);
+    cmd_parse += 4;
+    if (strncmp(cmd_parse, "(", 1) == 0) {
+        cmd_parse++;
+    }else{
+        return NULL;
+    }
+    cmd_parse = trim_quotes(cmd_parse);
+    int last_char = strlen(cmd_parse) - 1;
+    if (last_char < 0 || cmd_parse[last_char] != ')') {
+        return NULL;
+    }
+    cmd_parse[last_char] = '\0';
+    cs165_log(stdout, "Getting File: %s\n", cmd_parse);
+    int fd = open(cmd_parse, O_RDONLY);
+    if(fd < 0){
+        log_err("Problem opening file %s\n", cmd_parse);
+        return NULL;
+    }
+    size_t filesize = lseek(fd, 0, SEEK_END); lseek(fd, 0, SEEK_SET);
+    char* header = "load:\n";
+    char* output = (char*) calloc((strlen(header) + filesize + 1),sizeof(char));
+    strcpy(output, header);
+    int r_out = read(fd, output + strlen(header), filesize);
+    if(r_out < 0){
+        free(output);
+        close(fd);
+        return NULL;
+    }
+    cs165_log(stdout, "put %i bytes into the packet\n", r_out);
+    close(fd);
+    return output;
+}
+
+int main(void)
 {
     int client_socket = connect_client();
     if (client_socket < 0) {
@@ -96,10 +133,23 @@ int main(void) //This is a test.
             break;
         }
 
+        if(send_message.payload != read_buffer && send_message.payload != NULL){    
+            cs165_log(stdout, "Freeing size of %i\n", strlen(send_message.payload));
+            free(send_message.payload);
+        }
+        send_message.payload = read_buffer;
+        if (strncmp(read_buffer, "load", 4) == 0) {
+            send_message.payload = get_file(read_buffer);
+            if(send_message.payload == NULL){
+                log_err("Wrong load format!\n");
+                continue;
+            }
+        }
+
         // Only process input that is greater than 1 character.
         // Convert to message and send the message and the
         // payload directly to the server.
-        send_message.length = strlen(read_buffer);
+        send_message.length = strlen(send_message.payload);
         if (send_message.length > 1) {
             // Send the message_header, which tells server payload size
             if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
@@ -115,16 +165,16 @@ int main(void) //This is a test.
 
             // Always wait for server response (even if it is just an OK message)
             if ((len = recv(client_socket, &(recv_message), sizeof(message), 0)) > 0) {
-                printf("Received status code is %s\n", MESSAGE_EXPLANATION[recv_message.status]);
+                cs165_log(stdout, "Received status code is %s\n", MESSAGE_EXPLANATION[recv_message.status]);
                 if ((recv_message.status == OK_WAIT_FOR_RESPONSE) && (int) recv_message.length > 0) {
-                    printf("|____");
+                    cs165_log(stdout, "|____");
                     // Calculate number of bytes in response package
                     int num_bytes = (int) recv_message.length;
                     char payload[num_bytes + 1];
                     // Receive the payload and print it out
                     if ((len = recv(client_socket, payload, num_bytes, 0)) > 0) {
                         payload[num_bytes] = '\0';
-                        printf("Response: %s\n", payload);  
+                        cs165_log(stdout, "Response: %s\n", payload);  
                     }
                 }
             } else {
@@ -137,7 +187,7 @@ int main(void) //This is a test.
                 exit(1);
             }
         }
-        printf("Looping back \n");
+        cs165_log(stdout, "Looping back \n");
     }
     close(client_socket);
     return 0;

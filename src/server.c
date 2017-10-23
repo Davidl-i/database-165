@@ -34,10 +34,44 @@
  * This should be replaced in your implementation (and its implementation possibly moved to a different file).
  * It is currently here so that you can verify that your server and client can send messages.
  **/
+
+//Assume DSL is correct.
 char* execute_DbOperator(DbOperator* query) {
+    cs165_log(stdout, "New DB Operator got: Type: %i, fd: %i\n", query->type, query->client_fd);
+    if(query->type == INSERT){
+        Table* table = query->operator_fields.insert_operator.table;
+        int* values = query->operator_fields.insert_operator.values;
+        cs165_log(stdout,"our table is named %s\n", table->name);
+        cs165_log(stdout, "Our table length is: %i\n", table->table_length);
+        table->table_length++;
+        for(size_t i = 0; i < table->col_count; i++){
+            cs165_log(stdout,"Inserting: %i into col: %s\n", values[i], table->columns[i].name);
+            if(table->table_length == 1){ //Do NOT realloc an array of size 0!
+                table->columns[i].data = (int*) malloc(sizeof(int) * 1);
+            }else{
+                table->columns[i].data = (int*) realloc(table->columns[i].data, (sizeof(int) * table->table_length));
+            }
+            table->columns[i].data[table->table_length - 1] = values[i];
+            table->columns[i].column_length ++;
+            cs165_log(stdout,"inserted: %i into col: %s. This column now has %i elements\n", values[i], table->columns[i].name, table->columns[i].column_length);
+        }
+#ifdef LOG //Don't waste time if not logging
+        for(size_t i = 0; i < table->col_count; i++){
+            cs165_log(stdout, "Col: %s\n", table->columns[i].name);
+            for(size_t j = 0; j < table->table_length; j++){
+                cs165_log(stdout, "%i\n", table->columns[i].data[j]);
+            }
+        }
+#endif
+        free(query);
+        return "Done";
+    }
+
     free(query);
-    return "Fuck you";
+    return "Error in execute_DbOperator";
 }
+
+
 
 /**
  * handle_client(client_socket)

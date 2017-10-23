@@ -15,12 +15,12 @@ Table* lookup_table(const char* name) {
 		return NULL;
 	}
 	char* token2 = strsep(&table_req, ".");
-	char* token3 = strsep(&table_req, ".");
-	if(token3 != NULL){
-		log_err("Name invalid! (Too long)\n");
-		free(to_free);
-		return NULL;
-	}
+	// char* token3 = strsep(&table_req, ".");
+	// if(token3 != NULL){
+	// 	log_err("Name invalid! (Too long)\n");                /*Not checking name too long for now*/
+	// 	free(to_free);
+	// 	return NULL;
+	// }
 	if(token2 == NULL){
 		if(current_db == NULL){
 			log_err("lookup table with implicit db, but db not loaded\n");
@@ -97,7 +97,7 @@ Column* lookup_column(const char* name){
 		return NULL;
 	}
 	free(table_to_find);
-	cs165_log(stdout, "INFO: There are a total of %i cols \n", resulting_table->num_loaded_cols);
+	//cs165_log(stdout, "INFO: There are a total of %i cols \n", resulting_table->num_loaded_cols);
     for(size_t i = 0; i < resulting_table->num_loaded_cols; i++){
     	Column* cur_col = resulting_table->columns + i;
     	if(strcmp(cur_col->name, col_name_token) == 0){
@@ -106,6 +106,6 @@ Column* lookup_column(const char* name){
     	}
     }
     free(to_free);
-    log_err("Column not found!");
+    log_err("Column not found!\n");
     return NULL;
 }
