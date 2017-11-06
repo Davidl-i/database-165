@@ -76,17 +76,32 @@ char* execute_DbOperator(DbOperator* query) {
         int lower = query->operator_fields.select_operator.lower;
         int upper = query->operator_fields.select_operator.upper;
 
+        if(!exists_upper && !exists_lower){
+            free(query);
+            return "Error in execute_DbOperator: Neither upper nor lower specified";
+        }
+
+        cs165_log(stdout, "Select from column %s, store to %s", column->name, lval);
+        if(exists_upper){
+            cs165_log(stdout, ", where < %i", upper);
+        }
+        if(exists_lower){
+            cs165_log(stdout, ", where >= %i", lower);
+        }
+        cs165_log(stdout, "\n");
+
+
         int* result = (int*) malloc(column->column_length * sizeof(int));
         size_t result_index = 0;
-                    cs165_log(stdout,"%i\n", column->column_length);
+                    cs165_log(stdout,"Column length: %i\n", column->column_length);
 
         for(size_t i = 0; i < column->column_length; i++){
-            if( (exists_upper && exists_lower && column->data[i] >= lower && column->data[i] < upper) || (exists_upper && !exists_lower && column->data[i] >= upper) ||  (!exists_upper && exists_lower && column->data[i] < lower) ||  (!exists_lower && !exists_upper) ){
-                cs165_log(stdout, "%i qualifies\n", column->data[i]);
+            if( (exists_upper && exists_lower && column->data[i] >= lower && column->data[i] < upper) || (exists_upper && !exists_lower && column->data[i] < upper) ||  (!exists_upper && exists_lower && column->data[i] >= lower) ){
+                //cs165_log(stdout, "%i qualifies\n", column->data[i]);
                 result[result_index++] = i;
             }
         }
-                            cs165_log(stdout,"%i\n", result_index);
+                            cs165_log(stdout,"Number of hits: %i\n", result_index);
 
         result = (int*) realloc(result, sizeof(int) * result_index);
 

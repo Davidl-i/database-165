@@ -126,10 +126,8 @@ Status sync_db(Db* db){
 		ret_status.error_message = "Db to sync is null.";
 		return ret_status;
 	}
-	char* file_extension = ".dat";
-	char* file_to_open = (char*) malloc(sizeof(char) * (1 + strlen(file_extension) + strlen(db->name)) );
-	strcpy(file_to_open, db->name);
-	strcat(file_to_open, file_extension);
+	char* file_to_open = (char*) malloc(sizeof(char) * (5 + strlen(db->name)) );
+	snprintf(file_to_open, sizeof(char) * (5 + strlen(db->name)) , "%s.dat", db->name);
 	cs165_log(stdout, "Opening Db file for writing: %s\n", file_to_open);
 	int db_fd = open(file_to_open, O_WRONLY | O_TRUNC | O_CREAT , 0666);
 	free(file_to_open);
@@ -152,11 +150,8 @@ Status sync_db(Db* db){
 			ret_status.error_message = "Cannot write to DB file\n";
 			return ret_status;
 		}
-		char* tbl_file_to_open = (char*) malloc(sizeof(char) * (2 + strlen(file_extension) + strlen(db->name) + strlen(cur_table.name) ) );
-		strcpy(tbl_file_to_open, db->name);
-		strcat(tbl_file_to_open, ".");
-		strcat(tbl_file_to_open, cur_table.name);
-		strcat(tbl_file_to_open, file_extension);	
+		char* tbl_file_to_open = (char*) malloc(sizeof(char) * (6+ strlen(db->name) + strlen(cur_table.name) ) );
+		snprintf(tbl_file_to_open, sizeof(char) * (6+ strlen(db->name) + strlen(cur_table.name) ) , "%s.%s.dat", db->name, cur_table.name);
 		cs165_log(stdout, "Opening Table file for writing: %s\n", tbl_file_to_open);
 		int tbl_fd = open(tbl_file_to_open, O_WRONLY | O_TRUNC | O_CREAT , 0666);
 		free(tbl_file_to_open);
@@ -169,9 +164,7 @@ Status sync_db(Db* db){
 		for(size_t j = 0; j < cur_table.col_count; j++){
 			Column cur_col = cur_table.columns[j];
 			char* wb = (char*) malloc(sizeof(char) * (strlen(cur_col.name) + 3) );
-			strcpy(wb,">");
-			strcat(wb, cur_col.name);
-			strcat(wb,"\n");
+			snprintf(wb, sizeof(char) * (strlen(cur_col.name) + 3), ">%s\n", cur_col.name);
 			res = write(tbl_fd, wb, strlen(wb)); //Don't write the null terminator.
 			free(wb);
 			if(res < 0){
@@ -183,7 +176,7 @@ Status sync_db(Db* db){
 			}
 			wb = (char*) calloc(20 , sizeof(char));
 			for(size_t k = 0; k < cur_table.table_length; k++){
-				sprintf(wb, "%i\n", cur_col.data[k]);
+				snprintf(wb, 20, "%i\n", cur_col.data[k]);
 				res = write(tbl_fd, wb, strlen(wb));
 				if(res < 0){
 					free(wb);
@@ -238,10 +231,9 @@ Status add_db(const char* db_name, bool new) {
 			return ret_status;
 		}
 	}
-	char* file_extension = ".dat"; 
-	char* db_file = (char*) malloc(sizeof(char) * (1 + strlen(file_extension) + strlen(db_name)) );
-	strcpy(db_file, db_name);
-	strcat(db_file, file_extension);
+	char* db_file = (char*) malloc(sizeof(char) * (5 + strlen(db_name)) );
+	snprintf(db_file, sizeof(char) * (5 + strlen(db_name)) ,"%s.dat", db_name);
+
 	if( access( db_file , F_OK ) != -1 && new ) {	//when creating a new db, make sure it does not already exist on backing storage!
 		free(db_file);
 		ret_status.code = CREATED_ALREADY_EXISTS;
@@ -289,8 +281,8 @@ Status add_db(const char* db_name, bool new) {
 				continue;
 			}
 			trim_whitespace(db_linebuf);
-			char* tbl_file = (char*) malloc(sizeof(char) * (2 + strlen(file_extension) + strlen(db_name) + strlen(db_linebuf)) );
-			sprintf(tbl_file, "%s.%s%s", db_name, db_linebuf, file_extension);
+			char* tbl_file = (char*) malloc(sizeof(char) * (6 + strlen(db_name) + strlen(db_linebuf)) );
+			snprintf(tbl_file,sizeof(char) * (6 + strlen(db_name) + strlen(db_linebuf)) ,"%s.%s.dat", db_name, db_linebuf);
 			cs165_log(stdout, "file to get: %s\n", tbl_file);
 			FILE* tbl_fp = fopen(tbl_file, "r");
 			free(tbl_file);
@@ -303,22 +295,24 @@ Status add_db(const char* db_name, bool new) {
 			char tbl_linebuf[256];
 			size_t col_elems_since_last_label = 0;
 			size_t num_labels = 0;
+			size_t num_loaded_labels = 0;
 			while(fgets(tbl_linebuf, sizeof(tbl_linebuf), tbl_fp)){
 				if(strlen(tbl_linebuf) <= 1){
 					continue;
 				}
 				if(strncmp(tbl_linebuf, ">", 1) == 0){
 					num_labels ++;
+					num_loaded_labels += (strlen(tbl_linebuf) > 2);
 					col_elems_since_last_label = 0;
 				}else{
 					col_elems_since_last_label++;
 				}
 			}
-			cs165_log(stdout, "There are %i columns of %i size here\n", num_labels, col_elems_since_last_label);
+			cs165_log(stdout, "There are %i columns of %i size here (%i are loaded...)\n", num_labels, col_elems_since_last_label, num_loaded_labels);
 			Table new_table;
 			strcpy(new_table.name, db_linebuf);
     		new_table.col_count = num_labels;
-    		new_table.num_loaded_cols = num_labels;
+    		new_table.num_loaded_cols = num_loaded_labels;
     		new_table.table_length = col_elems_since_last_label;
     		new_table.columns = (Column*) malloc(sizeof(Column) * num_labels);
     		rewind(tbl_fp);
@@ -326,7 +320,7 @@ Status add_db(const char* db_name, bool new) {
     		int cur_col = -1;
     		size_t cur_pos = 0; //position within column
     		Column new_col;
-			while(fgets(tbl_linebuf, sizeof(tbl_linebuf), tbl_fp)){
+			while(fgets(tbl_linebuf, sizeof(tbl_linebuf), tbl_fp) && cur_col < (int) num_loaded_labels){
 				if(strlen(tbl_linebuf) <= 1){
 					continue;
 				}
@@ -345,10 +339,10 @@ Status add_db(const char* db_name, bool new) {
 					new_col.data = (int*) calloc(new_table.table_length, sizeof(int));
 				}else{
 					new_col.data[cur_pos] = atoi(tbl_linebuf);
-					cur_pos ++;
+					cur_pos++;
 				}
 			}
-			if(cur_col != -1){
+			if(cur_col != -1 && cur_col < (int) num_loaded_labels){
 				cs165_log(stdout, "Adding to table %s, column %s\n", new_table.name, new_col.name);
 				memcpy(&new_table.columns[cur_col], &new_col, sizeof(Column));
 			}

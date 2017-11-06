@@ -92,8 +92,8 @@ message_status parse_select(char* args, char* leftvar, DbOperator* dbo){ //For n
 
     char** args_index = &args;
     char* colname = next_token(args_index, &status);
-    char* highval = next_token(args_index, &status);
     char* lowval = next_token(args_index, &status);
+    char* highval = next_token(args_index, &status);
     char* overflow = strsep(args_index, ",");
     if(overflow != NULL){
        status = INCORRECT_FORMAT; 
