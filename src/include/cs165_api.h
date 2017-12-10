@@ -33,6 +33,7 @@ SOFTWARE.
 #define MAX_SIZE_NAME 64
 #define HANDLE_MAX_SIZE 64
 #define PAGE_SIZE 4048
+#define COL_INCREMENT 10
 
 /**
  * EXTRA
@@ -56,6 +57,7 @@ typedef struct Column {
     char name[MAX_SIZE_NAME]; 
     int* data;
     size_t column_length;
+    size_t column_max;
     // You will implement column indexes later. 
     void* index;
     //struct ColumnIndex *index;

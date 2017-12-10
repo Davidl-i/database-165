@@ -48,9 +48,16 @@ char* execute_DbOperator(DbOperator* query) {
         for(size_t i = 0; i < table->col_count; i++){
             cs165_log(stdout,"Inserting: %i into col: %s\n", values[i], table->columns[i].name);
             if(table->table_length == 1){ //Do NOT realloc an array of size 0!
-                table->columns[i].data = (int*) malloc(sizeof(int) * 1);
+                table->columns[i].column_max = COL_INCREMENT;
+                cs165_log(stdout, "ALLOCATING COL TO %i\n", COL_INCREMENT);
+                table->columns[i].data = (int*) malloc(sizeof(int) * COL_INCREMENT);
             }else{
-                table->columns[i].data = (int*) realloc(table->columns[i].data, (sizeof(int) * table->table_length));
+                cs165_log(stdout, "TABLE LENGTH IS %i, max column length is %i\n" , table->table_length , table->columns[i].column_max);
+                if(table->table_length >= table->columns[i].column_max){
+                    table->columns[i].column_max += COL_INCREMENT;
+                    cs165_log(stdout, "REALLOCATING COL TO %i!\n", table->columns[i].column_max);
+                    table->columns[i].data = (int*) realloc(table->columns[i].data, (sizeof(int) * (table->columns[i].column_max)));
+                }
             }
             table->columns[i].data[table->table_length - 1] = values[i];
             table->columns[i].column_length ++;
@@ -64,7 +71,7 @@ char* execute_DbOperator(DbOperator* query) {
             }
         }
 #endif
-        free(query);
+        free(query);  
         return "Done";
     }
     if(query->type == SELECT){
@@ -101,7 +108,7 @@ char* execute_DbOperator(DbOperator* query) {
                 result[result_index++] = i;
             }
         }
-                            cs165_log(stdout,"Number of hits: %i\n", result_index);
+        cs165_log(stdout,"Number of hits: %i\n", result_index);
 
         result = (int*) realloc(result, sizeof(int) * result_index);
 

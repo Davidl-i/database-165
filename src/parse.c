@@ -43,7 +43,7 @@ void parse_fetch(char* args, char* leftvar){
 
     Column* vars = lookup_column(colvar);
     Column positions;
-    for(int i = 0; i < client_context->col_count; i++){
+    for(size_t i = 0; i < client_context->col_count; i++){
         if(strcmp(client_context->columns[i].name, colpos )==0){
             positions = client_context->columns[i];
             break;
@@ -51,7 +51,7 @@ void parse_fetch(char* args, char* leftvar){
     }
 
     int* result = (int*) malloc(positions.column_length * sizeof(int));
-    for(int i = 0; i < positions.column_length; i++){
+    for(size_t i = 0; i < positions.column_length; i++){
         result[i] = vars->data[positions.data[i]];
     }
 size_t result_index = positions.column_length;
@@ -389,9 +389,14 @@ message_status load_from_client(char* input){
         while ((line_token = strsep(line_index, ",")) != NULL) {
             cs165_log(stdout, "Writing %i to %s.%s\n", atoi(line_token), tables[i]->name, columns[i]->name);
             if(columns[i]->column_length == 0){ //Do NOT realloc an array of size 0!
-                columns[i]->data = (int*) malloc(sizeof(int) * 1);
+                columns[i]->column_max = COL_INCREMENT;
+                columns[i]->data = (int*) malloc(sizeof(int) * COL_INCREMENT);
             }else{
-                columns[i]->data = (int*) realloc(columns[i]->data, (sizeof(int) * (columns[i]->column_length + 1)));
+                if(columns[i]->column_length >= columns[i]->column_max){
+                    columns[i]->column_max += COL_INCREMENT;
+                    columns[i]->data = (int*) realloc(columns[i]->data, (sizeof(int) * (columns[i]->column_max)));
+                    cs165_log(stdout, "REALLOCATING COL TO %i!\n", columns[i]->column_max);
+                }
             }
             columns[i]->data[columns[i]->column_length] = atoi(line_token);
             columns[i]->column_length++;

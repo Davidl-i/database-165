@@ -29,6 +29,7 @@ Table* lookup_table(const char* name) {
 		}
 		table_name_token = token;
 	}else{
+		cs165_log(stdout,"Going to do add_Db\n");
 		Status add_status = add_db(token, false);
 		if(add_status.code != OK){
 			log_err("Error when trying to import %s database: %s\n", token, add_status.error_message);

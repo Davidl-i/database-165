@@ -45,6 +45,7 @@ Column* create_column(char *name, Table *table, bool sorted, Status *ret_status)
 	strcpy((new_col->name), name);
 	new_col->index = NULL;
 	new_col->column_length = 0;
+	new_col->column_max = 0;
 	int* new_data = (int*) calloc(table->table_length, sizeof(int));
 	new_col->data = new_data;
 	memcpy(target_col, new_col, sizeof(Column));
@@ -210,6 +211,7 @@ Status sync_db(Db* db){
 //bool new indicates whether to bring the data from disk
 //Ensure the db does not already exist!
 Status add_db(const char* db_name, bool new) {
+	printf("current db name is %s, and to load is %s\n",current_db->name, db_name);
 	struct Status ret_status;
 	if(db_name == NULL){
 		ret_status.code = NULLPOINTER;
@@ -227,6 +229,7 @@ Status add_db(const char* db_name, bool new) {
 			ret_status.error_message = "Attempted to create a new DB, but it already exists on RAM!";
 			return ret_status;
 		}else{
+			cs165_log(stdout, "Function add_db has nothing to do since db to load is already loaded \n");
 			ret_status.code = OK; 
 			return ret_status;
 		}
@@ -336,7 +339,9 @@ Status add_db(const char* db_name, bool new) {
 					strcpy(new_col.name, tbl_linebuf + 1);
 					new_col.index = NULL;
 					new_col.column_length = new_table.table_length;
-					new_col.data = (int*) calloc(new_table.table_length, sizeof(int));
+					new_col.column_max = COL_INCREMENT*(((new_col.column_length) + (COL_INCREMENT) - 1) / (COL_INCREMENT)); //COL_INC * Ceiling(col_length/COL_INCREMENT)
+					cs165_log(stdout, "Max columns is %i\n", new_col.column_max);
+					new_col.data = (int*) calloc(new_col.column_max, sizeof(int));
 				}else{
 					new_col.data[cur_pos] = atoi(tbl_linebuf);
 					cur_pos++;
