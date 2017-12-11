@@ -9,4 +9,5 @@ Table* lookup_table(const char* name);
 Column* lookup_column(const char* name);
 Column* lookup_client_context(const char* name);
 message_status serve_print(char* command, int client_socket);
+void store_client_variable(const char* name, Column* col);
 #endif

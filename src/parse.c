@@ -61,18 +61,7 @@ size_t result_index = positions.column_length;
         new_col->data = result;
         new_col->column_length = result_index;
 
-        if(client_context->col_count == 0){
-            client_context->columns = (Column*) malloc(sizeof(Column));
-            client_context->col_count++;
-        }else{
-            client_context->columns = (Column*) realloc(client_context->columns, sizeof(Column) * (client_context->col_count + 1));
-            client_context->col_count++;
-        }
-                            cs165_log(stdout,"Memcpying to the %ith element\n", client_context->col_count - 1);
-
-        memcpy( &client_context->columns[client_context->col_count - 1], new_col, sizeof(Column));
-
-
+    store_client_variable(leftvar, new_col);
 
 }
 

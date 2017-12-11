@@ -124,6 +124,30 @@ Column* lookup_client_context(const char* name){
     return NULL;
 }
 
+void store_client_variable(const char* name, Column* col){
+	ssize_t element_to_insert = -1;
+	for(size_t i = 0; i < client_context->col_count; i++){
+        if(strcmp(client_context->columns[i].name, name) == 0){
+        	free(client_context->columns[i].data);
+        	//free(&(client_context->columns[i]));
+        	element_to_insert = i;
+        	goto insert_stage;
+        }
+    }
+    if(client_context->col_count == 0){
+        client_context->columns = (Column*) malloc(sizeof(Column));
+        client_context->col_count++;
+    }else{
+        client_context->columns = (Column*) realloc(client_context->columns, sizeof(Column) * (client_context->col_count + 1));
+        client_context->col_count++;
+    }
+    element_to_insert = client_context->col_count - 1;
+insert_stage:                           
+    cs165_log(stdout,"Memcpying result to variable %s, the %ith element\n", name, element_to_insert);
+    memcpy( &client_context->columns[element_to_insert], col, sizeof(Column));
+    //client_context->columns[element_to_insert] = *col;
+}
+
 message_status serve_print(char* command, int client_socket){
     char* cmd_parse = trim_whitespace(command);
     cs165_log(stdout, "command = %s\n", command );

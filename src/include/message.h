@@ -1,8 +1,8 @@
 #ifndef MESSAGE_H__
 #define MESSAGE_H__
 
-#define FILE_BUF_SIZE 100
-#define MAX_PAYLOAD_SIZE 20
+#define FILE_BUF_SIZE 500
+#define MAX_PAYLOAD_SIZE 8000
 
 // mesage_status defines the status of the previous request.
 // FEEL FREE TO ADD YOUR OWN OR REMOVE ANY THAT ARE UNUSED IN YOUR PROJECT
