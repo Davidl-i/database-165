@@ -52,7 +52,7 @@ Data file paths
 
 In the provided tests, the paths to the data files are set based on our testing
 infrastructure. For instance, we use
-“load("/home/cs165/cs165-management-scripts/project_tests_2017/data1.csv”)” to
+“load("../project_tests/data1.csv”)” to
 load data1.csv. You can (and most probably will have to) change this path to
 any absolute or relative path that matches your directory structure.
 

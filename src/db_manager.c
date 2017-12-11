@@ -211,7 +211,7 @@ Status sync_db(Db* db){
 //bool new indicates whether to bring the data from disk
 //Ensure the db does not already exist!
 Status add_db(const char* db_name, bool new) {
-	printf("current db name is %s, and to load is %s\n",current_db->name, db_name);
+	cs165_log(stdout, "current db name is %s, and to load is %s\n",current_db->name, db_name);
 	struct Status ret_status;
 	if(db_name == NULL){
 		ret_status.code = NULLPOINTER;

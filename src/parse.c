@@ -461,18 +461,8 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     } else if (strncmp(query_command, "print", 5) == 0) {
         query_command += 5;
         dbo = malloc(sizeof(DbOperator));
-
-        trim_parenthesis(query_command);
-
-        for(size_t i = 0; i < client_context->col_count; i++){
-            if(strcmp(client_context->columns[i].name, query_command) == 0){
-                for(size_t j = 0; j < client_context->columns[i].column_length; j++){
-                    printf("%i\n", client_context->columns[i].data[j]);
-                }
-            }
-        }
-
-
+        dbo->type = NONE;
+        send_message->status = serve_print(query_command, client_socket);
     } else if (strncmp(query_command, "fetch", 5) == 0) {
         query_command += 5;
         dbo = malloc(sizeof(DbOperator));

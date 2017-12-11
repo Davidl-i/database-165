@@ -215,6 +215,7 @@ typedef enum OperatorType {
     INSERT,
     OPEN,
     SELECT,
+    NONE,
 } OperatorType;
 
 typedef struct SelectOperator{

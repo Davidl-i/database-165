@@ -20,6 +20,8 @@ machine please look into this as a a source of error. */
 #include <string.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <stdbool.h>
+
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -28,6 +30,8 @@ machine please look into this as a a source of error. */
 #include "common.h"
 #include "message.h"
 #include "utils.h"
+#include "cs165_api.h"
+
 
 #define DEFAULT_STDIN_BUFFER_SIZE 1024
 
@@ -99,6 +103,175 @@ char* get_file(char* cmd){
     return output;
 }
 
+Status print_handler(char* cmd, int client_socket){
+    Status ret;
+    ret.code = OK;
+    cs165_log(stdout, "cmd: %s\n", cmd);
+    char* cmd_parse = trim_whitespace(cmd);
+    cmd_parse += 5;
+    if (strncmp(cmd_parse, "(", 1) == 0) {
+        cmd_parse++;
+    }else{
+        ret.code = ERROR;
+        ret.error_message = "Print: invalid syntax!";
+        return ret;
+    }
+    int last_char = strlen(cmd_parse) - 1;
+    if (last_char < 0 || cmd_parse[last_char] != ')') {
+        ret.code = ERROR;
+        ret.error_message = "Print: invalid syntax )!";
+        return ret;
+    }
+    cmd_parse[last_char] = '\0';
+    cs165_log(stdout, "Printing: %s\n", cmd_parse);
+    ssize_t len;
+    message send_message;
+    message recv_message;
+    print_packet recv_packet;
+    char send_payload[MAX_PAYLOAD_SIZE];
+    sprintf(send_payload, "print(%s)", cmd_parse); //Syntax verified on client side.
+    send_message.payload = send_payload;
+    send_message.length = strlen(send_payload);
+    send_message.status = OK_DONE;
+
+    do{
+        cs165_log(stdout, "payload = %s, length  = %i\n", send_message.payload, send_message.length);
+        // Send the message_header, which tells server payload size
+        if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
+            log_err("Failed to send message header.");
+            exit(1);
+        }
+        // Send the payload (query) to server
+        if (send(client_socket, send_message.payload, send_message.length, 0) == -1) {
+            log_err("Failed to send query payload.");
+            exit(1);
+        }
+        // Always wait for server response (even if it is just an OK message)
+        if ((len = recv(client_socket, &(recv_message), sizeof(message), 0)) > 0) {
+            cs165_log(stdout, "Received status code is %s\n", MESSAGE_EXPLANATION[recv_message.status]);
+            if ((recv_message.status == OK_WAIT_FOR_RESPONSE) && (int) recv_message.length == sizeof(print_packet)) {
+                if ((len = recv(client_socket, &recv_packet, sizeof(print_packet), 0)) > 0) {
+                    for(size_t i = 0; i < recv_packet.length; i++){
+                        printf("%i\n", recv_packet.payload[i]);
+                    }
+                   // printf("Final packet? %i\n", recv_packet.final);
+                    sprintf(send_payload, "OK");
+                    send_message.length = strlen(send_payload);
+                } else {
+                    log_err("Print receive: Failed to receive anything intelligible.");
+                    exit(1);     
+                }
+            } else {
+                log_err("Error from server: %s\n", MESSAGE_EXPLANATION[recv_message.status]);
+                ret.code = ERROR;
+                ret.error_message = "error from server!";
+                return ret;
+            }
+        } else{
+            log_err("Print: Failed to receive anything intelligible.");
+            exit(1);        
+        } 
+    } while(! recv_packet.final);
+
+
+    // Send the message_header, which tells server payload size
+    if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
+        log_err("Failed to send message header.");
+        exit(1);
+    }
+    // Send the payload (query) to server
+    if (send(client_socket, send_message.payload, send_message.length, 0) == -1) {
+        log_err("Failed to send query payload.");
+        exit(1);
+    }
+
+    if((len = recv(client_socket, &(recv_message), sizeof(message), 0)) > 0){                               //from processing query
+        cs165_log(stdout, "Received status code is %s\n", MESSAGE_EXPLANATION[recv_message.status]);
+    }
+    return ret;
+}
+
+//Stateless sending to server.
+Status send_file_to_server(char* cmd, int client_socket){
+    Status ret;
+    ret.code = OK;
+    cs165_log(stdout, "cmd: %s\n", cmd);
+    char* cmd_parse = trim_whitespace(cmd);
+    cmd_parse += 4;
+    if (strncmp(cmd_parse, "(", 1) == 0) {
+        cmd_parse++;
+    }else{
+        ret.code = ERROR;
+        ret.error_message = "Load: invalid syntax!";
+        return ret;
+    }
+    cmd_parse = trim_quotes(cmd_parse);
+    int last_char = strlen(cmd_parse) - 1;
+    if (last_char < 0 || cmd_parse[last_char] != ')') {
+        ret.code = ERROR;
+        ret.error_message = "Load: invalid syntax )!";
+        return ret;
+    }
+    cmd_parse[last_char] = '\0';
+    cs165_log(stdout, "Getting File: %s\n", cmd_parse);
+    FILE* fd = fopen(cmd_parse, "r");
+    if(fd == NULL){
+        log_err("Problem opening file %s\n", cmd_parse);
+        ret.code = IO_ERROR;
+        ret.error_message = "Load: cannot open client-side file!";
+        return ret;
+    }
+    char file_header [FILE_BUF_SIZE];
+    char linebuf [FILE_BUF_SIZE];
+    char payload [MAX_PAYLOAD_SIZE]; 
+    while((fgets(linebuf, sizeof(linebuf), fd) != NULL) & (strlen(linebuf) < 2));
+    strcpy(file_header, linebuf);
+    cs165_log(stdout, "load header: %s", file_header);
+    strcpy(linebuf, "");
+    message send_message;
+    message recv_message;
+    char* eof;
+    ssize_t len;
+    do{
+        sprintf(payload, "load:\n%s%s", file_header, linebuf);
+        while((eof = fgets(linebuf, sizeof(linebuf), fd))){
+            if(strlen(linebuf) < 2){
+                continue;
+            }
+            if(strlen(linebuf) + strlen(payload) >= MAX_PAYLOAD_SIZE){
+                break;
+            }
+            strcat(payload, linebuf);
+        }
+        send_message.payload = payload;
+        send_message.length = strlen(payload);
+        if(send_message.length > 1){
+            // Send the message_header, which tells server payload size
+            if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
+                log_err("Failed to send message header.");
+                exit(1);
+            }
+            // Send the payload (query) to server
+            if (send(client_socket, send_message.payload, send_message.length, 0) == -1) {
+                log_err("Failed to send query payload.");
+                exit(1);
+            }
+            //receive code.
+            if ((len = recv(client_socket, &(recv_message), sizeof(message), 0)) > 0) {
+                if (recv_message.status != OK_DONE) {
+                    ret.code = ERROR;
+                    ret.error_message = "Bad response or error from server!";
+                    return ret;
+                }
+
+            }
+
+        }
+    }while(eof != NULL);
+    fclose(fd);
+    return ret;
+}
+
 int main(void)
 {
     int client_socket = connect_client();
@@ -139,17 +312,30 @@ int main(void)
         }
         send_message.payload = read_buffer;
         if (strncmp(read_buffer, "load", 4) == 0) {
-            send_message.payload = get_file(read_buffer);
-            if(send_message.payload == NULL){
-                log_err("Wrong load format!\n");
-                continue;
+            // send_message.payload = get_file(read_buffer);
+            // if(send_message.payload == NULL){
+            //     log_err("Wrong load format!\n");
+            //     continue;
+            // }
+            Status out = send_file_to_server(read_buffer, client_socket);
+            if(out.code != OK){
+                log_err("FATAL client-side error on load: %s. Will shut down client\n", out.error_message);
+                exit(1); //FATAL error if you can't even load a file!
             }
+            send_message.payload = NULL;
+        }
+        if (strncmp(read_buffer, "print", 5) == 0) {
+            Status out = print_handler(read_buffer, client_socket);
+            if(out.code != OK){
+                log_err("Error in Printing! %s\n", out.error_message);
+            }
+            send_message.payload = NULL;
         }
 
         // Only process input that is greater than 1 character.
         // Convert to message and send the message and the
         // payload directly to the server.
-        send_message.length = strlen(send_message.payload);
+        send_message.length = (send_message.payload == NULL)? 0 : strlen(send_message.payload); //"undefined behavior"
         if (send_message.length > 1) {
             // Send the message_header, which tells server payload size
             if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {

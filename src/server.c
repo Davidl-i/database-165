@@ -71,7 +71,7 @@ char* execute_DbOperator(DbOperator* query) {
             }
         }
 #endif
-        free(query);  
+        db_operator_free(query);  
         return "Done";
     }
     if(query->type == SELECT){
@@ -84,7 +84,7 @@ char* execute_DbOperator(DbOperator* query) {
         int upper = query->operator_fields.select_operator.upper;
 
         if(!exists_upper && !exists_lower){
-            free(query);
+            db_operator_free(query);
             return "Error in execute_DbOperator: Neither upper nor lower specified";
         }
 
@@ -128,11 +128,11 @@ char* execute_DbOperator(DbOperator* query) {
 
         memcpy( &client_context->columns[client_context->col_count - 1], new_col, sizeof(Column));
 
-        free(query);
+        db_operator_free(query);
         return "Done";
     }
 
-    free(query);
+    db_operator_free(query);
     return "Error in execute_DbOperator";
 }
 
@@ -287,6 +287,20 @@ void shutdown_database(Db* db){ //Closes out current database
     }
     free(db->tables);
     free(db);
+}
+
+void db_operator_free(DbOperator* query){
+    switch(query->type){
+        case INSERT:
+            free(query->operator_fields.insert_operator.values);
+            break;
+        case SELECT:
+            //nothing
+            break;
+        default:
+            break;
+    }
+    free(query);
 }
 
 // Currently this main will setup the socket and accept a single client.

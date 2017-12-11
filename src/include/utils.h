@@ -10,9 +10,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#define LOG 1
-#define LOG_ERR 1
-#define LOG_INFO 1
+//#define LOG 1
+//#define LOG_ERR 1
+//#define LOG_INFO 1
 
 /**
  * trims newline characters from a string (in place)

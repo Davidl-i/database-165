@@ -1,6 +1,9 @@
 #ifndef MESSAGE_H__
 #define MESSAGE_H__
 
+#define FILE_BUF_SIZE 100
+#define MAX_PAYLOAD_SIZE 20
+
 // mesage_status defines the status of the previous request.
 // FEEL FREE TO ADD YOUR OWN OR REMOVE ANY THAT ARE UNUSED IN YOUR PROJECT
 typedef enum message_status {
@@ -29,5 +32,11 @@ typedef struct message {
     int length;
     char* payload;
 } message;
+
+typedef struct print_packet{
+    int payload[MAX_PAYLOAD_SIZE];
+    size_t length;
+    bool final;
+} print_packet;
 
 #endif

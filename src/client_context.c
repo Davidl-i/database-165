@@ -1,7 +1,11 @@
 #define _BSD_SOURCE
 #include "client_context.h"
 #include "utils.h"
+#include "message.h"
 #include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 Table* lookup_table(const char* name) {
 	char* table_req = (char*) malloc(sizeof(char) * (1 + strlen(name)));
@@ -109,4 +113,80 @@ Column* lookup_column(const char* name){
     free(to_free);
     log_err("Column not found!\n");
     return NULL;
+}
+
+Column* lookup_client_context(const char* name){
+    for(size_t i = 0; i < client_context->col_count; i++){
+        if(strcmp(client_context->columns[i].name, name) == 0){
+        	return &(client_context->columns[i]);
+        }
+    }
+    return NULL;
+}
+
+message_status serve_print(char* command, int client_socket){
+    char* cmd_parse = trim_whitespace(command);
+    cs165_log(stdout, "command = %s\n", command );
+    //cmd_parse += 5;
+    if (strncmp(cmd_parse, "(", 1) == 0) {
+        cmd_parse++;
+    }else{
+        return INCORRECT_FORMAT;
+    }
+    int last_char = strlen(cmd_parse) - 1;
+    if (last_char < 0 || cmd_parse[last_char] != ')') {
+        return INCORRECT_FORMAT;
+    }
+    cmd_parse[last_char] = '\0';
+    cs165_log(stdout, "Printing: %s\n", cmd_parse);
+    Column* target = lookup_client_context(cmd_parse);
+    if(target == NULL){
+    	return OBJECT_NOT_FOUND;
+    }
+
+    message send_message;
+    message recv_message;
+    print_packet send_packet;
+    size_t cur_pos = 0;
+    size_t length;
+
+    do{
+    	size_t send_length = ((target->column_length - cur_pos) > MAX_PAYLOAD_SIZE) ? MAX_PAYLOAD_SIZE: (target->column_length - cur_pos);
+    	send_packet.length = send_length;
+    	send_packet.final = ( (cur_pos + send_length) == target->column_length );
+    	memset(&(send_packet.payload), 0, MAX_PAYLOAD_SIZE);
+    	memcpy(&(send_packet.payload), (target->data) + cur_pos, sizeof(int)*send_length); //pointer arithmetic
+    	send_message.status = OK_WAIT_FOR_RESPONSE;
+    	send_message.length = sizeof(send_packet);
+    	send_message.payload = NULL;
+    	// for(size_t i = 0; i < send_packet.length; i++){
+    	// 	printf("num = %i\n", send_packet.payload[i]);
+    	// }
+
+    	cs165_log(stdout, "Currently sending %i ints to print\n", send_length);
+	    if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
+            log_err("Failed to send message.");
+            exit(1);
+        }
+        if (send(client_socket, &send_packet, send_message.length, 0) == -1) {
+            log_err("Failed to send message.");
+            exit(1);
+        }
+        length = recv(client_socket, &recv_message, sizeof(message), 0);
+        if(length == 0){
+            log_err("Failed to receive message.");
+            exit(1);        	
+        }
+        cs165_log(stdout, "recv length: %i\n", recv_message.length);
+        char recv_buffer[recv_message.length + 1];
+        length = recv(client_socket, recv_buffer, recv_message.length,0);
+        recv_buffer[recv_message.length]  = '\0';
+        cs165_log(stdout, "Received: %s", recv_buffer);
+        if(strcmp(recv_buffer, "OK") != 0){
+        	log_err("Corrupt message received during print!");
+            exit(1);  
+        }
+        cur_pos += send_length;
+    }while(cur_pos < target->column_length);
+    return OK_DONE;
 }
