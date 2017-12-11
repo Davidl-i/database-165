@@ -32,37 +32,210 @@ char* next_token(char** tokenizer, message_status* status) {
     return token;
 }
 
-void parse_fetch(char* args, char* leftvar){
-    message_status status = OK_WAIT_FOR_RESPONSE;
-
+message_status parse_avg (char* args, char* leftvar){
+    message_status status = OK_DONE;
+    if(leftvar == NULL){
+        status = INCORRECT_FORMAT;
+        return status;
+    }
     trim_parenthesis(args);
-        char** args_index = &args;
+    char** args_index = &args;
+    char* colvar = next_token(args_index, &status);
+    cs165_log(stdout, "colvar is %s. Store to is %s\n", colvar, leftvar);
+    Column* working_column;
+    working_column = lookup_client_context(colvar);
+    if(working_column == NULL){
+        working_column = lookup_column(colvar);
+        if(working_column == NULL){
+            status = OBJECT_NOT_FOUND;
+            return status;
+        }
+    }
+    double acc = 0;
+    for(size_t i = 0; i < working_column->column_length; i++){
+        acc += working_column->data[i];
+    }
+    double final = (acc / (working_column->column_length));
+    double* result = (double*) malloc(sizeof(double));
+    result[0] = final;
+    Column* new_col = (Column*) malloc(sizeof(Column));
+    strcpy(new_col->name, leftvar);
+    new_col->data = (int*)result;
+    new_col->column_length = sizeof(double) / sizeof(int);
+    new_col->type = FLOAT;
 
+    cs165_log(stdout, "accumulator %f, average %f\n", acc, final);
+    store_client_variable(leftvar, new_col);
+    return status;
+}
+
+message_status parse_sum (char* args, char* leftvar){
+    message_status status = OK_DONE;
+    if(leftvar == NULL){
+        status = INCORRECT_FORMAT;
+        return status;
+    }
+    trim_parenthesis(args);
+    char** args_index = &args;
+    char* colvar = next_token(args_index, &status);
+    cs165_log(stdout, "colvar is %s. Store to is %s\n", colvar, leftvar);
+    Column* working_column;
+    working_column = lookup_client_context(colvar);
+    if(working_column == NULL){
+        working_column = lookup_column(colvar);
+        if(working_column == NULL){
+            status = OBJECT_NOT_FOUND;
+            return status;
+        }
+    }
+    long acc = 0;
+    for(size_t i = 0; i < working_column->column_length; i++){
+        acc += working_column->data[i];
+    }
+    cs165_log(stdout, "answer %ld\n",acc);
+    long* result = (long*) malloc(sizeof(long));
+    result[0] = acc;
+    Column* new_col = (Column*) malloc(sizeof(Column));
+    strcpy(new_col->name, leftvar);
+    new_col->data = (int*)result;
+    new_col->column_length = sizeof(long) / sizeof(int);
+    new_col->type = LONG;
+
+    store_client_variable(leftvar, new_col);
+    return status;
+}
+
+message_status min_max (char* args, char* leftvar, bool want_max){
+    return OK_DONE;
+}
+
+
+// message_status min_max (char* args, char* leftvar, bool want_max){
+//     message_status status = OK_DONE;
+//     if(leftvar == NULL){
+//         status = INCORRECT_FORMAT;
+//         return status;
+//     }
+//     trim_parenthesis(args);
+//     char** args_index = &args;
+//     char* colvar = next_token(args_index, &status);
+//     cs165_log(stdout, "colvar is %s. Store to is %s\n", colvar, leftvar);
+//     Column* working_column;
+//     working_column = lookup_client_context(colvar);
+//     if(working_column == NULL){
+//         working_column = lookup_column(colvar);
+//         if(working_column == NULL){
+//             status = OBJECT_NOT_FOUND;
+//             return status;
+//         }
+//     }
+//     long acc = 0;
+//     for(size_t i = 0; i < working_column->column_length; i++){
+//         acc += working_column->data[i];
+//     }
+//     cs165_log(stdout, "answer %ld\n",acc);
+//     long* result = (long*) malloc(sizeof(long));
+//     result[0] = acc;
+//     Column* new_col = (Column*) malloc(sizeof(Column));
+//     strcpy(new_col->name, leftvar);
+//     new_col->data = (int*)result;
+//     new_col->column_length = sizeof(long) / sizeof(int);
+//     new_col->type = LONG;
+
+//     store_client_variable(leftvar, new_col);
+//     return status;
+// }
+
+message_status col_math (char* args, char* leftvar, bool add){
+    message_status status = OK_DONE;
+    if(leftvar == NULL){
+        status = INCORRECT_FORMAT;
+        return status;
+    }
+    trim_parenthesis(args);
+    char** args_index = &args;
+    char* op_1 = next_token(args_index, &status);
+    char* op_2 = next_token(args_index, &status);
+
+    Column* col_1 = lookup_client_context(op_1);
+    if(col_1 == NULL){
+        col_1 = lookup_column(op_1);
+        if(col_1 == NULL){
+            status = OBJECT_NOT_FOUND;
+            return status;
+        }
+    }
+
+    Column* col_2 = lookup_client_context(op_2);
+    if(col_2 == NULL){
+        col_2 = lookup_column(op_2);
+        if(col_2 == NULL){
+            status = OBJECT_NOT_FOUND;
+            return status;
+        }
+    }
+    if(col_1->column_length != col_2->column_length){
+        status = EXECUTION_ERROR;
+        return status;
+    }
+
+    int* result = (int*) malloc(col_1->column_length * sizeof(int));
+    if(add){
+        for(size_t i = 0; i < col_1->column_length; i++){
+            result[i] = col_1->data[i] + col_2->data[i];
+        }        
+    } else{
+        for(size_t i = 0; i < col_1->column_length; i++){
+            result[i] = col_1->data[i] - col_2->data[i];
+        }             
+    }
+
+    Column* new_col = (Column*) malloc(sizeof(Column));
+    strcpy(new_col->name, leftvar);
+    new_col->data = result;
+    new_col->column_length = col_1->column_length;
+    new_col->type = INT;
+
+    store_client_variable(leftvar, new_col);
+    return status;
+}
+
+//Fetching does not go through dbo (function does the fetch itself)
+message_status parse_fetch(char* args, char* leftvar){
+    message_status status = OK_DONE;
+    if(leftvar == NULL){
+        status = INCORRECT_FORMAT;
+        return status;
+    }
+    trim_parenthesis(args);
+    char** args_index = &args;
     char* colvar = next_token(args_index, &status);
     char* colpos = next_token(args_index, &status);
 
     Column* vars = lookup_column(colvar);
-    Column positions;
-    for(size_t i = 0; i < client_context->col_count; i++){
-        if(strcmp(client_context->columns[i].name, colpos )==0){
-            positions = client_context->columns[i];
-            break;
-        }
+    if(vars == NULL){
+        status = OBJECT_NOT_FOUND;
+        return status;
+    }
+    Column* positions = lookup_client_context(colpos);
+    if(positions == NULL){
+        status = OBJECT_NOT_FOUND;
+        return status;
     }
 
-    int* result = (int*) malloc(positions.column_length * sizeof(int));
-    for(size_t i = 0; i < positions.column_length; i++){
-        result[i] = vars->data[positions.data[i]];
+    int* result = (int*) malloc(positions->column_length * sizeof(int));
+    for(size_t i = 0; i < positions->column_length; i++){
+        result[i] = vars->data[positions->data[i]];
     }
-size_t result_index = positions.column_length;
 
-        Column* new_col = (Column*) malloc(sizeof(Column));
-        strcpy(new_col->name, leftvar);
-        new_col->data = result;
-        new_col->column_length = result_index;
+    Column* new_col = (Column*) malloc(sizeof(Column));
+    strcpy(new_col->name, leftvar);
+    new_col->data = result;
+    new_col->column_length = positions->column_length;
+    new_col->type = INT;
 
     store_client_variable(leftvar, new_col);
-
+    return status;
 }
 
 
@@ -455,8 +628,38 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     } else if (strncmp(query_command, "fetch", 5) == 0) {
         query_command += 5;
         dbo = malloc(sizeof(DbOperator));
-        send_message->status = OK_DONE;
-        parse_fetch(query_command, handle);
+        dbo->type = NONE;
+        send_message->status = parse_fetch(query_command, handle);
+    } else if (strncmp(query_command, "avg", 3) == 0) {
+        query_command += 3;
+        dbo = malloc(sizeof(DbOperator));
+        dbo->type = NONE;
+        send_message->status = parse_avg(query_command, handle);
+    } else if (strncmp(query_command, "sum", 3) == 0) {
+        query_command += 3;
+        dbo = malloc(sizeof(DbOperator));
+        dbo->type = NONE;
+        send_message->status = parse_sum(query_command, handle);
+    } else if (strncmp(query_command, "add", 3) == 0) {
+        query_command += 3;
+        dbo = malloc(sizeof(DbOperator));
+        dbo->type = NONE;
+        send_message->status = col_math(query_command, handle, true);
+    } else if (strncmp(query_command, "sub", 3) == 0) {
+        query_command += 3;
+        dbo = malloc(sizeof(DbOperator));
+        dbo->type = NONE;
+        send_message->status = col_math(query_command, handle, false);
+    } else if (strncmp(query_command, "min", 3) == 0) {
+        query_command += 3;
+        dbo = malloc(sizeof(DbOperator));
+        dbo->type = NONE;
+        send_message->status = min_max(query_command, handle, false);
+    } else if (strncmp(query_command, "max", 3) == 0) {
+        query_command += 3;
+        dbo = malloc(sizeof(DbOperator));
+        dbo->type = NONE;
+        send_message->status = min_max(query_command, handle, true);
     } else if (strncmp(query_command, "relational_insert", 17) == 0) {
         query_command += 17;
         send_message->status = OK_WAIT_FOR_RESPONSE;

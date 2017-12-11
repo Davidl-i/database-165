@@ -45,9 +45,9 @@ SOFTWARE.
  **/
 
 typedef enum DataType {
-     INT,
-     LONG,
-     FLOAT
+     INT = 0,
+     LONG = 1,
+     FLOAT = 2,
 } DataType;
 
 struct Comparator;
@@ -58,6 +58,7 @@ typedef struct Column {
     int* data;
     size_t column_length;
     size_t column_max;
+    DataType type;
     // You will implement column indexes later. 
     void* index;
     //struct ColumnIndex *index;
@@ -215,6 +216,7 @@ typedef enum OperatorType {
     INSERT,
     OPEN,
     SELECT,
+    FETCH,
     NONE,
 } OperatorType;
 

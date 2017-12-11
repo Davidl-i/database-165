@@ -151,9 +151,26 @@ Status print_handler(char* cmd, int client_socket){
             cs165_log(stdout, "Received status code is %s\n", MESSAGE_EXPLANATION[recv_message.status]);
             if ((recv_message.status == OK_WAIT_FOR_RESPONSE) && (int) recv_message.length == sizeof(print_packet)) {
                 if ((len = recv(client_socket, &recv_packet, sizeof(print_packet), 0)) > 0) {
-                    for(size_t i = 0; i < recv_packet.length; i++){
-                        printf("%i\n", recv_packet.payload[i]);
+                    if(recv_packet.type == INT){
+                        for(size_t i = 0; i < recv_packet.length; i++){
+                            printf("%i\n", recv_packet.payload[i]);
+                        }
                     }
+                    if(recv_packet.type == LONG){
+                        for(size_t i = 0; i < recv_packet.length; i+= sizeof(long)/sizeof(int)){ //assuming doubles take up n*sizeof(int) bytes
+                            long val;
+                            memcpy(&val, &(recv_packet.payload[i]), sizeof(long));
+                            printf("%ld\n", val);
+                        } 
+                    }
+                    if(recv_packet.type == FLOAT){
+                        for(size_t i = 0; i < recv_packet.length; i+= sizeof(double)/sizeof(int)){ //assuming doubles take up n*sizeof(int) bytes
+                            double val;
+                            memcpy(&val, &(recv_packet.payload[i]), sizeof(double));
+                            printf("%.2f\n", val);
+                        } 
+                    }
+
                    // printf("Final packet? %i\n", recv_packet.final);
                     sprintf(send_payload, "OK");
                     send_message.length = strlen(send_payload);

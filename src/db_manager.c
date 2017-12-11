@@ -46,6 +46,7 @@ Column* create_column(char *name, Table *table, bool sorted, Status *ret_status)
 	new_col->index = NULL;
 	new_col->column_length = 0;
 	new_col->column_max = 0;
+	new_col->type = INT;
 	int* new_data = (int*) calloc(table->table_length, sizeof(int));
 	new_col->data = new_data;
 	memcpy(target_col, new_col, sizeof(Column));

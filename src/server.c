@@ -63,14 +63,14 @@ char* execute_DbOperator(DbOperator* query) {
             table->columns[i].column_length ++;
             cs165_log(stdout,"inserted: %i into col: %s. This column now has %i elements\n", values[i], table->columns[i].name, table->columns[i].column_length);
         }
-#ifdef LOG //Don't waste time if not logging
-        for(size_t i = 0; i < table->col_count; i++){
-            cs165_log(stdout, "Col: %s\n", table->columns[i].name);
-            for(size_t j = 0; j < table->table_length; j++){
-                cs165_log(stdout, "%i\n", table->columns[i].data[j]);
-            }
-        }
-#endif
+// #ifdef LOG //Don't waste time if not logging
+//         for(size_t i = 0; i < table->col_count; i++){
+//             cs165_log(stdout, "Col: %s\n", table->columns[i].name);
+//             for(size_t j = 0; j < table->table_length; j++){
+//                 cs165_log(stdout, "%i\n", table->columns[i].data[j]);
+//             }
+//         }
+// #endif
         db_operator_free(query);  
         return "Done";
     }
@@ -116,21 +116,8 @@ char* execute_DbOperator(DbOperator* query) {
         strcpy(new_col->name, lval);
         new_col->data = result;
         new_col->column_length = result_index;
-
-        // if(client_context->col_count == 0){
-        //     client_context->columns = (Column*) malloc(sizeof(Column));
-        //     client_context->col_count++;
-        // }else{
-        //     client_context->columns = (Column*) realloc(client_context->columns, sizeof(Column) * (client_context->col_count + 1));
-        //     client_context->col_count++;
-        // }
-        //                     cs165_log(stdout,"Memcpying to the %ith element\n", client_context->col_count - 1);
-
-        // memcpy( &client_context->columns[client_context->col_count - 1], new_col, sizeof(Column));
-
+        new_col->type = INT;
         store_client_variable(lval, new_col);
-
-
         db_operator_free(query);
         return "Done";
     }

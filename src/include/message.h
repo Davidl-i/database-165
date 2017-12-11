@@ -1,5 +1,6 @@
 #ifndef MESSAGE_H__
 #define MESSAGE_H__
+#include "cs165_api.h"
 
 #define FILE_BUF_SIZE 500
 #define MAX_PAYLOAD_SIZE 8000
@@ -37,6 +38,7 @@ typedef struct print_packet{
     int payload[MAX_PAYLOAD_SIZE];
     size_t length;
     bool final;
+    DataType type;
 } print_packet;
 
 #endif

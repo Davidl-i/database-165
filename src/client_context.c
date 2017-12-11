@@ -129,7 +129,6 @@ void store_client_variable(const char* name, Column* col){
 	for(size_t i = 0; i < client_context->col_count; i++){
         if(strcmp(client_context->columns[i].name, name) == 0){
         	free(client_context->columns[i].data);
-        	//free(&(client_context->columns[i]));
         	element_to_insert = i;
         	goto insert_stage;
         }
@@ -146,6 +145,7 @@ insert_stage:
     cs165_log(stdout,"Memcpying result to variable %s, the %ith element\n", name, element_to_insert);
     memcpy( &client_context->columns[element_to_insert], col, sizeof(Column));
     //client_context->columns[element_to_insert] = *col;
+    free(col); //make sure to not free data as that is referenced
 }
 
 message_status serve_print(char* command, int client_socket){
@@ -180,6 +180,7 @@ message_status serve_print(char* command, int client_socket){
     	send_packet.final = ( (cur_pos + send_length) == target->column_length );
     	memset(&(send_packet.payload), 0, MAX_PAYLOAD_SIZE);
     	memcpy(&(send_packet.payload), (target->data) + cur_pos, sizeof(int)*send_length); //pointer arithmetic
+    	send_packet.type = target->type;
     	send_message.status = OK_WAIT_FOR_RESPONSE;
     	send_message.length = sizeof(send_packet);
     	send_message.payload = NULL;
