@@ -150,7 +150,7 @@ insert_stage:
 
 message_status serve_print(char* command, int client_socket){
     char* cmd_parse = trim_whitespace(command);
-    cs165_log(stdout, "command = %s\n", command );
+  //  cs165_log(stdout, "command = %s\n", command );
     //cmd_parse += 5;
     if (strncmp(cmd_parse, "(", 1) == 0) {
         cmd_parse++;
@@ -162,7 +162,7 @@ message_status serve_print(char* command, int client_socket){
         return INCORRECT_FORMAT;
     }
     cmd_parse[last_char] = '\0';
-    cs165_log(stdout, "Printing: %s\n", cmd_parse);
+ //   cs165_log(stdout, "Printing: %s\n", cmd_parse);
     Column* target = lookup_client_context(cmd_parse);
     if(target == NULL){
     	return OBJECT_NOT_FOUND;
@@ -189,7 +189,7 @@ message_status serve_print(char* command, int client_socket){
     	// 	printf("num = %i\n", send_packet.payload[i]);
     	// }
 
-    	cs165_log(stdout, "Currently sending %i ints to print\n", send_length);
+    //	cs165_log(stdout, "Currently sending %i ints to print\n", send_length);
 	    if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
             log_err("Failed to send message.");
             exit(1);
@@ -203,11 +203,11 @@ message_status serve_print(char* command, int client_socket){
             log_err("Failed to receive message. (aborting)\n");
             exit(1);        	
         }
-        cs165_log(stdout, "recv length: %i\n", recv_message.length);
+  //      cs165_log(stdout, "recv length: %i\n", recv_message.length);
         char recv_buffer[recv_message.length + 1];
         length = recv(client_socket, recv_buffer, recv_message.length,0);
         recv_buffer[recv_message.length]  = '\0';
-        cs165_log(stdout, "Received: %s\n", recv_buffer);
+    //    cs165_log(stdout, "Received: %s\n", recv_buffer);
         if(strcmp(recv_buffer, "OK") != 0){
         	log_err("Corrupt message received during print! (aborting)\n");
             exit(1);  

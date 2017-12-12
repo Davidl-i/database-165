@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
+#include <time.h>
+
 
 
 #include "common.h"
@@ -30,10 +32,10 @@
 #include "utils.h"
 #include "client_context.h"
 
-#define MAX_WORKER_THREADS  40
-#define MAX_SHARE_PER_THREAD 1
-#define RES_START_SIZE 1024
-#define RES_MULTIPLE 500
+#define MAX_WORKER_THREADS  4
+#define MAX_SHARE_PER_THREAD 10
+#define RES_START_SIZE 1024     //meant only for dynamically sized results
+#define RES_MULTIPLE 500        //only for dynamically sized results
 
 
 void* select_worker(void* args){
@@ -72,6 +74,58 @@ void* select_worker(void* args){
                 //     res[j].column_max = res[j].column_max * RES_MULTIPLE;
                 // }
             }            
+        }
+    }
+
+    for(size_t i = 0; i < num_share; i++){
+        Column* to_store = (Column*)malloc(sizeof(Column));
+        memcpy(to_store, &res[i], sizeof(Column));
+        to_store->data = realloc(to_store->data, sizeof(int)*to_store->column_length);
+        to_store->column_max = to_store->column_length;
+        store_client_variable(lvals[i], to_store);
+    }
+
+    return NULL;
+}
+
+//void share_scan(size_t start, size_t end){
+void* share_scan(void* args){
+    size_t start = ((int*)args)[0];
+    size_t end = ((int*)args)[1];
+    cs165_log(stdout, "I am in charge of scanning %i through %i!\n", start, end-1);
+    size_t num_share = end-start;
+    Column* active = query_buffer[start].operator_fields.select_operator.column;
+    Column res[num_share];
+    // bool exists_lower[num_share];
+    // bool exists_upper[num_share];
+    int lower[num_share];
+    int upper[num_share];
+    char* lvals[num_share];
+    for(size_t i = 0; i < num_share; i++){
+        lvals[i] = query_buffer[i+start].operator_fields.select_operator.lval;
+        res[i].column_max = RES_START_SIZE;
+        res[i].column_length = 0;
+        res[i].data = (int*) malloc(sizeof(int)*active->column_length);
+        strcpy(res[i].name, lvals[i]);
+        res[i].type = INT;
+ //       exists_lower[i] = query_buffer[i+start].operator_fields.select_operator.exists_lower;
+ //       exists_upper[i] = query_buffer[i+start].operator_fields.select_operator.exists_upper;
+        lower[i] = query_buffer[i+start].operator_fields.select_operator.lower;
+        upper[i] = query_buffer[i+start].operator_fields.select_operator.upper;
+    }
+
+
+
+    for(size_t i = 0; i < active->column_length; i++){
+        int cur_data = active->data[i];
+        for(size_t j = 0; j < num_share; j++){
+            // if( (exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j] && active->data[i] < upper[j]) || (exists_upper[j] && !exists_lower[j] && active->data[i] < upper[j]) ||  (!exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j]) ){
+            //     res[j].data[res[j].column_length++] = i;
+            // }     
+
+            if(cur_data >= lower[j] && cur_data < upper[j]){
+                res[j].data[res[j].column_length++] = i;
+            }       
         }
     }
 
@@ -216,7 +270,7 @@ char* execute_DbOperator(DbOperator* query) {
                 args[i][1] = cur_task+tasks_to_do;
                 cs165_log(stdout, "Assigning to thread number %i, a range of %i to %i\n", i, args[i][0] , args[i][1]-1);
 
-                if(pthread_create(&(threads[i]), NULL, select_worker, &(args[i]))){
+                if(pthread_create(&(threads[i]), NULL, share_scan, &(args[i]))){
                     log_err("FATAL: Cannot create thread!");
                     exit(1);
                 }
@@ -233,6 +287,25 @@ char* execute_DbOperator(DbOperator* query) {
         db_operator_free(query);  
         return "All Done";
     }
+
+//     if(query->type == RUN_BATCH){
+// #define DIV_UP(x,y) ((x + y - 1)/y)
+// #define MIN(x, y) (((x) < (y)) ? (x) : (y))
+//         cs165_log(stdout, "starting batch run\n");
+//         for(size_t cur_vector = 0; cur_vector < query_buffer_count; cur_vector+=MAX_SHARE_PER_THREAD){
+//             size_t start = cur_vector;
+//             size_t end = MIN(cur_vector + MAX_SHARE_PER_THREAD ,query_buffer_count);
+//             cs165_log(stdout, "Starts at %i, ends at %i\n", start, end-1);
+//             // clock_t start_t = clock(), diff;
+//             share_scan(start, end);
+//             // diff = clock() - start_t;
+//             // int msec = diff * 1000 / CLOCKS_PER_SEC;
+//             // printf("batch:%dms\n", msec%1000);
+//         }
+
+
+//         return "All Done";
+//     }
 
     db_operator_free(query);
     return "Error in execute_DbOperator";
@@ -334,7 +407,11 @@ bool handle_client(int client_socket) {
                 if(query_capture_state){
                     result = acknowledge_and_add_DbOperator(query);
                 } else {
+                    // clock_t start_t = clock(), diff;
                     result = execute_DbOperator(query);
+                    // diff = clock() - start_t;
+                    // int msec = diff * 1000 / CLOCKS_PER_SEC;
+                    // printf("%dms\n", msec);
                 }
             }else if(send_message.status == SHUTTING_DOWN){
                 keep_going = false;
