@@ -226,6 +226,7 @@ typedef struct SelectOperator{
     int lower;
     int upper;
     Column* column;
+    Column* assoc_pos;
     char* lval;
 } SelectOperator;
 

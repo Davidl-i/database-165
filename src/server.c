@@ -77,6 +77,7 @@ char* execute_DbOperator(DbOperator* query) {
     if(query->type == SELECT){
 
         Column* column = query->operator_fields.select_operator.column;
+        Column* assoc_pos = query->operator_fields.select_operator.assoc_pos;
         char* lval = query->operator_fields.select_operator.lval;
         bool exists_lower = query->operator_fields.select_operator.exists_lower;
         bool exists_upper = query->operator_fields.select_operator.exists_upper;
@@ -102,12 +103,22 @@ char* execute_DbOperator(DbOperator* query) {
         size_t result_index = 0;
                     cs165_log(stdout,"Column length: %i\n", column->column_length);
 
-        for(size_t i = 0; i < column->column_length; i++){
-            if( (exists_upper && exists_lower && column->data[i] >= lower && column->data[i] < upper) || (exists_upper && !exists_lower && column->data[i] < upper) ||  (!exists_upper && exists_lower && column->data[i] >= lower) ){
-                //cs165_log(stdout, "%i qualifies\n", column->data[i]);
-                result[result_index++] = i;
+        if(assoc_pos == NULL){
+            for(size_t i = 0; i < column->column_length; i++){
+                if( (exists_upper && exists_lower && column->data[i] >= lower && column->data[i] < upper) || (exists_upper && !exists_lower && column->data[i] < upper) ||  (!exists_upper && exists_lower && column->data[i] >= lower) ){
+                    //cs165_log(stdout, "%i qualifies\n", column->data[i]);
+                    result[result_index++] = i;
+                }
             }
+        } else {
+            for(size_t i = 0; i < column->column_length; i++){
+                if( (exists_upper && exists_lower && column->data[i] >= lower && column->data[i] < upper) || (exists_upper && !exists_lower && column->data[i] < upper) ||  (!exists_upper && exists_lower && column->data[i] >= lower) ){
+                    //cs165_log(stdout, "%i qualifies\n", column->data[i]);
+                    result[result_index++] = assoc_pos->data[i];
+                }
+            }            
         }
+
         cs165_log(stdout,"Number of hits: %i\n", result_index);
 
         result = (int*) realloc(result, sizeof(int) * result_index);
@@ -133,7 +144,8 @@ char* execute_DbOperator(DbOperator* query) {
  * This is the execution routine after a client has connected.
  * It will continually listen for messages from the client and execute queries.
  **/
-void handle_client(int client_socket) {
+bool handle_client(int client_socket) {
+    bool keep_going = true;
     int done = 0;
     int length = 0;
 
@@ -176,6 +188,7 @@ void handle_client(int client_socket) {
                 // 2. Handle request
                 result = execute_DbOperator(query);      
             }else if(send_message.status == SHUTTING_DOWN){
+                keep_going = false;
                 free(query);
                 result = "";
                 shutdown_server();
@@ -207,6 +220,7 @@ void handle_client(int client_socket) {
 
     log_info("Connection closed at socket %d!\n", client_socket);
     close(client_socket);
+    return keep_going;
 }
 
 /**
@@ -303,19 +317,31 @@ int main(void)
     if (server_socket < 0) {
         exit(1);
     }
-
-    log_info("Waiting for a connection %d ...\n", server_socket);
-
-    struct sockaddr_un remote;
-    socklen_t t = sizeof(remote);
     int client_socket = 0;
 
-    if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
-        log_err("L%d: Failed to accept a new connection.\n", __LINE__);
-        exit(1);
-    }
+    do{
+        if(client_context != NULL){
+            for(size_t i = 0; i < client_context-> col_count; i++){
+                if(client_context->columns[i].data != NULL){
+                    free(client_context->columns[i].data );
+                }
+            }
+            free(client_context->columns);
+            free(client_context);
+        }
 
-    handle_client(client_socket);
 
+
+
+        log_info("Waiting for a connection %d ...\n", server_socket);
+
+        struct sockaddr_un remote;
+        socklen_t t = sizeof(remote);
+
+        if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
+            log_err("L%d: Failed to accept a new connection.\n", __LINE__);
+            exit(1);
+        }
+    } while(handle_client(client_socket));
     return 0;
 }

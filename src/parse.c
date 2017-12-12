@@ -248,7 +248,7 @@ message_status parse_fetch(char* args, char* leftvar){
     return status;
 }
 
-message_status parse_reg_select(char* colname, char* lowval, char* highval, char* leftvar, DbOperator* dbo){
+message_status make_dbo_reg_select(char* colname, char* lowval, char* highval, char* leftvar, DbOperator* dbo){
     Column* target_column = lookup_column(colname);
     if(target_column == NULL){
         return OBJECT_NOT_FOUND;
@@ -261,9 +261,34 @@ message_status parse_reg_select(char* colname, char* lowval, char* highval, char
     dbo->operator_fields.select_operator.exists_upper = e_upper;
     dbo->operator_fields.select_operator.lower = (e_lower ? atoi(lowval): 0 );
     dbo->operator_fields.select_operator.upper = (e_upper ? atoi(highval): 0);
+    dbo->operator_fields.select_operator.assoc_pos = NULL;
     return OK_WAIT_FOR_RESPONSE;
 }
 
+message_status make_dbo_select_from(char* pos, char* assoc_vals, char* lowval, char* highval, char* leftvar, DbOperator* dbo){
+    Column* target_column = lookup_client_context(assoc_vals);
+    if(target_column == NULL){
+        return OBJECT_NOT_FOUND;
+    }
+    Column* assoc_pos = lookup_client_context(pos);
+    if(target_column == NULL){
+        return OBJECT_NOT_FOUND;
+    }
+    if(target_column->column_length != assoc_pos->column_length){
+        log_err("DBO select from operator isn't such that values and their associated positions are of same size!");
+        return EXECUTION_ERROR;
+    }
+    dbo->operator_fields.select_operator.assoc_pos = assoc_pos;
+    dbo->operator_fields.select_operator.column = target_column;
+    dbo->operator_fields.select_operator.lval = leftvar;
+    bool e_lower = (strcmp(lowval, "null") != 0);
+    bool e_upper = (strcmp(highval, "null") != 0);
+    dbo->operator_fields.select_operator.exists_lower = e_lower;
+    dbo->operator_fields.select_operator.exists_upper = e_upper;
+    dbo->operator_fields.select_operator.lower = (e_lower ? atoi(lowval): 0 );
+    dbo->operator_fields.select_operator.upper = (e_upper ? atoi(highval): 0);
+    return OK_WAIT_FOR_RESPONSE;
+}
 
 message_status parse_select(char* args, char* leftvar, DbOperator* dbo){ //For now, only supports 3-arg selects!! Needs to be updated to support either
     message_status status;
@@ -276,18 +301,25 @@ message_status parse_select(char* args, char* leftvar, DbOperator* dbo){ //For n
     trim_parenthesis(args);
 
     char** args_index = &args;
-    char* colname = next_token(args_index, &status);
-    char* lowval = next_token(args_index, &status);
-    char* highval = next_token(args_index, &status);
-    char* overflow = strsep(args_index, ",");
-    if(overflow != NULL){
-       return INCORRECT_FORMAT;
-    }
+    char* first_arg = next_token(args_index, &status);
+    char* second_arg = next_token(args_index, &status);
+    char* third_arg = next_token(args_index, &status);
+    // char* overflow = strsep(args_index, ",");
+    // if(overflow != NULL){
+    //    return INCORRECT_FORMAT;
+    // }
     if(status == INCORRECT_FORMAT){
         return status;
     }
+    char* fourth_arg = next_token(args_index, &status);
+    if(fourth_arg == NULL){
+        cs165_log(stdout, "Going parse as regular select\n");
+    }else{
+        cs165_log(stdout, "Going to parse as select from\n");
+        return make_dbo_select_from(first_arg, second_arg, third_arg, fourth_arg, leftvar, dbo);
+    }
 
-    return parse_reg_select(colname, lowval, highval, leftvar, dbo);
+    return make_dbo_reg_select(first_arg, second_arg, third_arg, leftvar, dbo);
 }
 
 
