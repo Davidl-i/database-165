@@ -255,6 +255,9 @@ message_status make_dbo_reg_select(char* colname, char* lowval, char* highval, c
     }
     dbo->operator_fields.select_operator.column = target_column;
     dbo->operator_fields.select_operator.lval = leftvar;
+    char* select_lval = (char*) malloc(sizeof(char)*(strlen(leftvar) + 1));
+    strcpy(select_lval, leftvar);
+    dbo->operator_fields.select_operator.lval = select_lval;
     bool e_lower = (strcmp(lowval, "null") != 0);
     bool e_upper = (strcmp(highval, "null") != 0);
     dbo->operator_fields.select_operator.exists_lower = e_lower;
@@ -280,7 +283,9 @@ message_status make_dbo_select_from(char* pos, char* assoc_vals, char* lowval, c
     }
     dbo->operator_fields.select_operator.assoc_pos = assoc_pos;
     dbo->operator_fields.select_operator.column = target_column;
-    dbo->operator_fields.select_operator.lval = leftvar;
+    char* select_lval = (char*) malloc(sizeof(char)*(strlen(leftvar) + 1));
+    strcpy(select_lval, leftvar);
+    dbo->operator_fields.select_operator.lval = select_lval;
     bool e_lower = (strcmp(lowval, "null") != 0);
     bool e_upper = (strcmp(highval, "null") != 0);
     dbo->operator_fields.select_operator.exists_lower = e_lower;
@@ -322,6 +327,25 @@ message_status parse_select(char* args, char* leftvar, DbOperator* dbo){ //For n
     return make_dbo_reg_select(first_arg, second_arg, third_arg, leftvar, dbo);
 }
 
+message_status start_batch(){
+    if(query_capture_state){
+        log_err("Cannot start batch: batch already started");
+        return OBJECT_ALREADY_EXISTS;
+    }
+    memset(query_buffer, 0, sizeof(query_buffer));
+    query_capture_state = true;
+    query_buffer_count = 0;
+    return OK_DONE;
+}
+
+message_status end_batch(){
+    if(!query_capture_state){
+        log_err("Cannot stop batch: batch doesn't even exist!");
+        return OBJECT_NOT_FOUND;
+    }
+    query_capture_state = false;
+    return OK_WAIT_FOR_RESPONSE;
+}
 
 
 message_status parse_create_col(char* create_arguments) {
@@ -638,7 +662,7 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
     if (equals_pointer != NULL) {
         // handle exists, store here. 
         *equals_pointer = '\0';
-        cs165_log(stdout, "FILE HANDLE: %s\n", handle);
+        cs165_log(stdout, "LVAL: %s\n", handle);
         query_command = ++equals_pointer;
     } else {
         handle = NULL;
@@ -715,6 +739,15 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         query_command += 5;
         send_message->status = load_from_client(query_command);
         dbo = malloc(sizeof(DbOperator));
+    } else if (strncmp(query_command, "batch_queries", 13) == 0) {
+        query_command += 13;
+        send_message->status = start_batch();
+        dbo = malloc(sizeof(DbOperator));
+    } else if (strncmp(query_command, "batch_execute", 13) == 0) {
+        query_command += 13;
+        send_message->status = end_batch();
+        dbo = malloc(sizeof(DbOperator));
+        dbo->type = RUN_BATCH;
     }
     if (dbo == NULL) {
         return dbo;

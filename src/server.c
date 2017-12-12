@@ -20,6 +20,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <string.h>
+#include <pthread.h>
+
 
 #include "common.h"
 #include "parse.h"
@@ -28,8 +30,60 @@
 #include "utils.h"
 #include "client_context.h"
 
-#define DEFAULT_QUERY_BUFFER_SIZE 1024
+#define MAX_WORKER_THREADS  3
+#define MAX_SHARE_PER_THREAD 2
+#define RES_START_SIZE 1024
+#define RES_MULTIPLE 2
 
+
+void* select_worker(void* args){
+    size_t start = ((int*)args)[0];
+    size_t end = ((int*)args)[1];
+    size_t num_share = end-start;
+    cs165_log(stdout, "I am in charge of doing %i through %i!\n", start, end-1);
+    Column* active = query_buffer[start].operator_fields.select_operator.column;
+    Column res[num_share];
+    bool exists_lower[num_share];
+    bool exists_upper[num_share];
+    int lower[num_share];
+    int upper[num_share];
+    char* lvals[num_share];
+    for(size_t i = 0; i < num_share; i++){
+        lvals[i] = query_buffer[i+start].operator_fields.select_operator.lval;
+        res[i].column_max = RES_START_SIZE;
+        res[i].column_length = 0;
+        res[i].data = (int*) malloc(sizeof(int)*RES_START_SIZE);
+        strcpy(res[i].name, lvals[i]);
+        res[i].type = INT;
+        exists_lower[i] = query_buffer[i+start].operator_fields.select_operator.exists_lower;
+        exists_upper[i] = query_buffer[i+start].operator_fields.select_operator.exists_upper;
+        lower[i] = query_buffer[i+start].operator_fields.select_operator.lower;
+        upper[i] = query_buffer[i+start].operator_fields.select_operator.upper;
+    }
+
+
+    for(size_t i = 0; i < active->column_length; i++){
+        for(size_t j = 0; j < num_share; j++){
+            if( (exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j] && active->data[i] < upper[j]) || (exists_upper[j] && !exists_lower[j] && active->data[i] < upper[j]) ||  (!exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j]) ){
+                res[j].data[res[j].column_length++] = i;
+                if(res[j].column_length == res[j].column_max){
+                    res[j].data = realloc(res[j].data, sizeof(int) * (RES_MULTIPLE * res[j].column_max));
+                    res[j].column_max = res[j].column_max * RES_MULTIPLE;
+                }
+            }            
+        }
+    }
+
+    for(size_t i = 0; i < num_share; i++){
+        Column* to_store = (Column*)malloc(sizeof(Column));
+        memcpy(to_store, &res[i], sizeof(Column));
+        to_store->data = realloc(to_store->data, sizeof(int)*to_store->column_length);
+        to_store->column_max = to_store->column_length;
+        store_client_variable(lvals[i], to_store);
+    }
+
+    return NULL;
+}
 
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  * This should be replaced in your implementation (and its implementation possibly moved to a different file).
@@ -133,11 +187,96 @@ char* execute_DbOperator(DbOperator* query) {
         return "Done";
     }
 
+
+    if(query->type == RUN_BATCH){
+        cs165_log(stdout, "Starting batch run..\n");
+        // for(size_t i = 0; i < query_buffer_count; i++){
+        //     DbOperator* new_query = (DbOperator*) malloc(sizeof(DbOperator));
+        //     memcpy(new_query, &(query_buffer[i]), sizeof(DbOperator));
+        //     char* res = execute_DbOperator(new_query);
+        //     cs165_log(stdout, "output from exec: %s\n", res);
+        // }
+
+
+
+#define DIV_UP(x,y) ((x + y - 1)/y)
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+
+        size_t cur_task = 0;
+        while(cur_task < query_buffer_count){
+            size_t needed_worker_threads = MIN(MAX_WORKER_THREADS, DIV_UP((query_buffer_count-cur_task),MAX_SHARE_PER_THREAD));
+
+            pthread_t threads[needed_worker_threads];
+            int args[needed_worker_threads][2];
+
+            for(size_t i = 0; i < needed_worker_threads; i++){
+                size_t tasks_to_do = MIN(MAX_SHARE_PER_THREAD, (query_buffer_count-cur_task));
+                args[i][0] = cur_task;
+                args[i][1] = cur_task+tasks_to_do;
+                cs165_log(stdout, "Assigning to thread number %i, a range of %i to %i\n", i, args[i][0] , args[i][1]-1);
+
+                if(pthread_create(&(threads[i]), NULL, select_worker, &(args[i]))){
+                    log_err("FATAL: Cannot create thread!");
+                    exit(1);
+                }
+
+                cur_task += tasks_to_do;
+            }
+
+            for(size_t i = 0; i < needed_worker_threads; i++){
+                (void) pthread_join(threads[i], NULL);
+            }
+
+        }
+
+        db_operator_free(query);  
+        return "All Done";
+    }
+
     db_operator_free(query);
     return "Error in execute_DbOperator";
 }
 
 
+
+char* acknowledge_and_add_DbOperator(DbOperator* query){
+    if(query_buffer_count == DEFAULT_QUERY_BUFFER_SIZE){
+        return "Query Queue full!! (oops!)";
+    }
+    if(query->type != SELECT){
+        return "Query not a select operator!";
+    }
+    if(query_buffer_count > 1 && query->operator_fields.select_operator.column != query_buffer[0].operator_fields.select_operator.column){
+        return "Query needs to reference same column!";
+    }
+    memcpy(&(query_buffer[query_buffer_count]), query, sizeof(DbOperator));
+
+            // DbOperator* querya = &(query_buffer[query_buffer_count]);
+            // Column* column = querya->operator_fields.select_operator.column;
+            // char* lval = querya->operator_fields.select_operator.lval;
+            // bool exists_lower = querya->operator_fields.select_operator.exists_lower;
+            // bool exists_upper = querya->operator_fields.select_operator.exists_upper;
+            // int lower = querya->operator_fields.select_operator.lower;
+            // int upper = querya->operator_fields.select_operator.upper;
+
+            // if(!exists_upper && !exists_lower){
+            //     db_operator_free(querya);
+            //     return "Error in execute_DbOperator: Neither upper nor lower specified";
+            // }
+
+            // cs165_log(stdout, "Select from column %s, store to %s, (%p)\n", column->name, lval, lval);
+            // if(exists_upper){
+            //     cs165_log(stdout, ", where < %i", upper);
+            // }
+            // if(exists_lower){
+            //     cs165_log(stdout, ", where >= %i", lower);
+            // }
+            // cs165_log(stdout, "\n");
+
+    query_buffer_count++;
+    free(query); //Special case here: don't want to free the lval string referenced by query
+    return "Query Queued";
+}
 
 /**
  * handle_client(client_socket)
@@ -159,6 +298,11 @@ bool handle_client(int client_socket) {
     client_context = (ClientContext*) malloc(sizeof(ClientContext));
     client_context->columns = NULL;
     client_context->col_count = 0;
+
+    //init query queue
+    memset(&query_buffer, 0 , sizeof(query_buffer));
+    query_buffer_count = 0;
+    query_capture_state = false;
 
     // Continually receive messages from client and execute queries.
     // 1. Parse the command
@@ -186,7 +330,11 @@ bool handle_client(int client_socket) {
             char* result;
             if(send_message.status == OK_WAIT_FOR_RESPONSE){
                 // 2. Handle request
-                result = execute_DbOperator(query);      
+                if(query_capture_state){
+                    result = acknowledge_and_add_DbOperator(query);
+                } else {
+                    result = execute_DbOperator(query);
+                }
             }else if(send_message.status == SHUTTING_DOWN){
                 keep_going = false;
                 free(query);
@@ -294,12 +442,13 @@ void shutdown_database(Db* db){ //Closes out current database
 }
 
 void db_operator_free(DbOperator* query){
+    cs165_log(stdout,"Freeing db operator!!");
     switch(query->type){
         case INSERT:
             free(query->operator_fields.insert_operator.values);
             break;
         case SELECT:
-            //nothing
+            free(query->operator_fields.select_operator.lval);
             break;
         default:
             break;

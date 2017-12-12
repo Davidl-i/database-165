@@ -217,6 +217,7 @@ typedef enum OperatorType {
     OPEN,
     SELECT,
     FETCH,
+    RUN_BATCH,
     NONE,
 } OperatorType;
 
