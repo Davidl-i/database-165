@@ -206,7 +206,7 @@ message_status serve_print(char* command, int client_socket){
         char recv_buffer[recv_message.length + 1];
         length = recv(client_socket, recv_buffer, recv_message.length,0);
         recv_buffer[recv_message.length]  = '\0';
-        cs165_log(stdout, "Received: %s", recv_buffer);
+        cs165_log(stdout, "Received: %s\n", recv_buffer);
         if(strcmp(recv_buffer, "OK") != 0){
         	log_err("Corrupt message received during print!");
             exit(1);  

@@ -2,6 +2,7 @@
 Please look up _XOPEN_SOURCE for more details. As well, if your code does not compile on the lab
 machine please look into this as a a source of error. */
 #define _XOPEN_SOURCE
+#define _BSD_SOURCE
 
 /**
  * client.c
@@ -103,36 +104,22 @@ char* get_file(char* cmd){
     return output;
 }
 
-Status print_handler(char* cmd, int client_socket){
-    Status ret;
-    ret.code = OK;
-    cs165_log(stdout, "cmd: %s\n", cmd);
-    char* cmd_parse = trim_whitespace(cmd);
-    cmd_parse += 5;
-    if (strncmp(cmd_parse, "(", 1) == 0) {
-        cmd_parse++;
-    }else{
-        ret.code = ERROR;
-        ret.error_message = "Print: invalid syntax!";
-        return ret;
-    }
-    int last_char = strlen(cmd_parse) - 1;
-    if (last_char < 0 || cmd_parse[last_char] != ')') {
-        ret.code = ERROR;
-        ret.error_message = "Print: invalid syntax )!";
-        return ret;
-    }
-    cmd_parse[last_char] = '\0';
-    cs165_log(stdout, "Printing: %s\n", cmd_parse);
+Column* print_one(char* varname, int client_socket){
     ssize_t len;
     message send_message;
     message recv_message;
     print_packet recv_packet;
     char send_payload[MAX_PAYLOAD_SIZE];
-    sprintf(send_payload, "print(%s)", cmd_parse); //Syntax verified on client side.
+    sprintf(send_payload, "print(%s)", varname); //Syntax verified on client side.
     send_message.payload = send_payload;
     send_message.length = strlen(send_payload);
     send_message.status = OK_DONE;
+
+    Column* ret = (Column*) malloc(sizeof(Column));
+    strcpy(ret->name, varname);
+    ret->data = NULL;
+    ret->column_length = 0;
+    ret->index = NULL;
 
     do{
         cs165_log(stdout, "payload = %s, length  = %i\n", send_message.payload, send_message.length);
@@ -151,25 +138,35 @@ Status print_handler(char* cmd, int client_socket){
             cs165_log(stdout, "Received status code is %s\n", MESSAGE_EXPLANATION[recv_message.status]);
             if ((recv_message.status == OK_WAIT_FOR_RESPONSE) && (int) recv_message.length == sizeof(print_packet)) {
                 if ((len = recv(client_socket, &recv_packet, sizeof(print_packet), 0)) > 0) {
-                    if(recv_packet.type == INT){
-                        for(size_t i = 0; i < recv_packet.length; i++){
-                            printf("%i\n", recv_packet.payload[i]);
-                        }
+                    // if(recv_packet.type == INT){
+                    //     for(size_t i = 0; i < recv_packet.length; i++){
+                    //         printf("%i\n", recv_packet.payload[i]);
+                    //     }
+                    // }
+                    // if(recv_packet.type == LONG){
+                    //     for(size_t i = 0; i < recv_packet.length; i+= sizeof(long)/sizeof(int)){ //assuming doubles take up n*sizeof(int) bytes
+                    //         long val;
+                    //         memcpy(&val, &(recv_packet.payload[i]), sizeof(long));
+                    //         printf("%ld\n", val);
+                    //     } 
+                    // }
+                    // if(recv_packet.type == FLOAT){
+                    //     for(size_t i = 0; i < recv_packet.length; i+= sizeof(double)/sizeof(int)){ //assuming doubles take up n*sizeof(int) bytes
+                    //         double val;
+                    //         memcpy(&val, &(recv_packet.payload[i]), sizeof(double));
+                    //         printf("%.2f\n", val);
+                    //     } 
+                    // }
+
+                    if(ret->data == NULL){
+                        ret->data = (int*)malloc(recv_packet.length * sizeof(int));
+                    } else{
+                        ret->data = (int*)realloc(ret->data, (ret->column_length + recv_packet.length) * sizeof(int));
                     }
-                    if(recv_packet.type == LONG){
-                        for(size_t i = 0; i < recv_packet.length; i+= sizeof(long)/sizeof(int)){ //assuming doubles take up n*sizeof(int) bytes
-                            long val;
-                            memcpy(&val, &(recv_packet.payload[i]), sizeof(long));
-                            printf("%ld\n", val);
-                        } 
-                    }
-                    if(recv_packet.type == FLOAT){
-                        for(size_t i = 0; i < recv_packet.length; i+= sizeof(double)/sizeof(int)){ //assuming doubles take up n*sizeof(int) bytes
-                            double val;
-                            memcpy(&val, &(recv_packet.payload[i]), sizeof(double));
-                            printf("%.2f\n", val);
-                        } 
-                    }
+
+                    memcpy(ret->data + (sizeof(int) * ret->column_length), recv_packet.payload, sizeof(int)*recv_packet.length);
+                    ret->column_length += recv_packet.length;
+                    ret->type = recv_packet.type;
 
                    // printf("Final packet? %i\n", recv_packet.final);
                     sprintf(send_payload, "OK");
@@ -180,9 +177,7 @@ Status print_handler(char* cmd, int client_socket){
                 }
             } else {
                 log_err("Error from server: %s\n", MESSAGE_EXPLANATION[recv_message.status]);
-                ret.code = ERROR;
-                ret.error_message = "error from server!";
-                return ret;
+                return NULL;
             }
         } else{
             log_err("Print: Failed to receive anything intelligible.");
@@ -204,6 +199,126 @@ Status print_handler(char* cmd, int client_socket){
 
     if((len = recv(client_socket, &(recv_message), sizeof(message), 0)) > 0){                               //from processing query
         cs165_log(stdout, "Received status code is %s\n", MESSAGE_EXPLANATION[recv_message.status]);
+    }
+    return ret;
+}
+
+Status print_handler(char* cmd, int client_socket){
+    Status ret;
+    ret.code = OK;
+    cs165_log(stdout, "cmd: %s\n", cmd);
+    char* cmd_parse = trim_whitespace(cmd);
+    cmd_parse += 5;
+    if (strncmp(cmd_parse, "(", 1) == 0) {
+        cmd_parse++;
+    }else{
+        ret.code = ERROR;
+        ret.error_message = "Print: invalid syntax!";
+        return ret;
+    }
+    int last_char = strlen(cmd_parse) - 1;
+    if (last_char < 0 || cmd_parse[last_char] != ')') {
+        ret.code = ERROR;
+        ret.error_message = "Print: invalid syntax )!";
+        return ret;
+    }
+    cmd_parse[last_char] = '\0';
+    char* token;
+    char** tokenizer = &cmd_parse;
+    char* backup = (char*) malloc(strlen(cmd_parse) + 1);
+    strcpy(backup, cmd_parse);
+
+    size_t print_width = 0;
+    while ((token = strsep(tokenizer, ",")) != NULL) {
+        //cs165_log(stdout, "Printing: %s\n", token);
+        print_width ++;
+    }
+    cs165_log(stdout, "Print width %i\n", print_width);
+    Column* print_cols[print_width];
+    size_t cur_ptrs[print_width];
+    memset(print_cols, 0, sizeof(print_cols));
+    memset(cur_ptrs, 0, sizeof(cur_ptrs));
+    tokenizer = &backup;
+
+    size_t cur_col = 0;
+    while ((token = strsep(tokenizer, ",")) != NULL) {
+        Column* col = print_one(token, client_socket);
+        if(col == NULL){
+            ret.code = ERROR;
+            ret.error_message = "Error in communicating with server while printing!";
+            goto print_cleanup;
+        }
+        print_cols[cur_col] = col;
+        cur_col++;
+    }
+
+    bool halt_print = false;
+    long val_long;
+    double val_dbl;
+    do{
+        for(size_t i = 0; i < print_width; i++){
+            //cs165_log(stdout, "curptr = %i\n", cur_ptrs[i]);
+            switch(print_cols[i]->type){
+                case INT:
+                    printf("%i", print_cols[i]->data[cur_ptrs[i]]);
+                    cur_ptrs[i] += 1;
+                    break;
+                case LONG:
+                    memcpy(&val_long, &(print_cols[i]->data[cur_ptrs[i]]), sizeof(long));
+                    printf("%ld", val_long);
+                    cur_ptrs[i] += sizeof(long) / sizeof(int);
+                    break;
+                case FLOAT:
+                    memcpy(&val_dbl, &(print_cols[i]->data[cur_ptrs[i]]), sizeof(double));
+                    printf("%.2f", val_dbl);
+                    cur_ptrs[i] += sizeof(double) / sizeof(int);
+                    break; 
+            }
+            if(i != print_width-1){
+                printf(",");
+            }
+            if(cur_ptrs[i] >= print_cols[i]->column_length){
+                halt_print = true;
+            }
+        }
+        printf("\n");
+    } while(! halt_print);
+
+
+
+
+
+    // Column* print_col = print_one(cmd_parse, client_socket);
+    // if(print_col->type == INT){
+    //     for(size_t i = 0; i < print_col->column_length; i++){
+    //         printf("%i\n", print_col->data[i]);
+    //     }
+    // }
+    // if(print_col->type == LONG){
+    //     for(size_t i = 0; i < print_col->column_length; i+= sizeof(long)/sizeof(int)){ //assuming doubles take up n*sizeof(int) bytes
+    //         long val;
+    //         memcpy(&val, &(print_col->data[i]), sizeof(long));
+    //         printf("%ld\n", val);
+    //     } 
+    // }
+    // if(print_col->type == FLOAT){
+    //     for(size_t i = 0; i < print_col->column_length; i+= sizeof(double)/sizeof(int)){ //assuming doubles take up n*sizeof(int) bytes
+    //         double val;
+    //         memcpy(&val, &(print_col->data[i]), sizeof(double));
+    //         printf("%.2f\n", val);
+    //     } 
+    // }  
+    // free(print_col->data);
+    // free(print_col);  
+print_cleanup:
+    if(backup != NULL){
+        free(backup);
+    }
+    for(size_t i = 0; i < print_width; i++){
+        if(print_cols[i] != NULL){
+            free(print_cols[i]->data);
+            free(print_cols[i]);            
+        }
     }
     return ret;
 }

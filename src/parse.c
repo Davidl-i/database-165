@@ -105,46 +105,56 @@ message_status parse_sum (char* args, char* leftvar){
     return status;
 }
 
+
 message_status min_max (char* args, char* leftvar, bool want_max){
-    return OK_DONE;
+    message_status status = OK_DONE;
+    if(leftvar == NULL){
+        status = INCORRECT_FORMAT;
+        return status;
+    }
+    trim_parenthesis(args);
+    char** args_index = &args;
+    char* colvar = next_token(args_index, &status);
+    cs165_log(stdout, "colvar is %s. Store to is %s\n", colvar, leftvar);
+    Column* working_column;
+    working_column = lookup_client_context(colvar);
+    if(working_column == NULL){
+        working_column = lookup_column(colvar);
+        if(working_column == NULL){
+            status = OBJECT_NOT_FOUND;
+            return status;
+        }
+    }
+    if(working_column->column_length == 0){
+        status = EXECUTION_ERROR;
+        return status;
+    }
+    int cur_bound = working_column->data[0];
+    if(want_max){  //Look for max val
+        for(size_t i = 0; i < working_column->column_length; i++){
+            if(working_column->data[i] > cur_bound){
+                cur_bound = working_column->data[i];
+            }
+        }
+    } else{   //look for min val
+        for(size_t i = 0; i < working_column->column_length; i++){
+            if(working_column->data[i] < cur_bound){
+                cur_bound = working_column->data[i];
+            }
+        }
+    }
+    cs165_log(stdout, "answer %i\n", cur_bound);
+    int* result = (int*) malloc(sizeof(int));
+    result[0] = cur_bound;
+    Column* new_col = (Column*) malloc(sizeof(Column));
+    strcpy(new_col->name, leftvar);
+    new_col->data = result;
+    new_col->column_length = 1;
+    new_col->type = INT;
+
+    store_client_variable(leftvar, new_col);
+    return status;
 }
-
-
-// message_status min_max (char* args, char* leftvar, bool want_max){
-//     message_status status = OK_DONE;
-//     if(leftvar == NULL){
-//         status = INCORRECT_FORMAT;
-//         return status;
-//     }
-//     trim_parenthesis(args);
-//     char** args_index = &args;
-//     char* colvar = next_token(args_index, &status);
-//     cs165_log(stdout, "colvar is %s. Store to is %s\n", colvar, leftvar);
-//     Column* working_column;
-//     working_column = lookup_client_context(colvar);
-//     if(working_column == NULL){
-//         working_column = lookup_column(colvar);
-//         if(working_column == NULL){
-//             status = OBJECT_NOT_FOUND;
-//             return status;
-//         }
-//     }
-//     long acc = 0;
-//     for(size_t i = 0; i < working_column->column_length; i++){
-//         acc += working_column->data[i];
-//     }
-//     cs165_log(stdout, "answer %ld\n",acc);
-//     long* result = (long*) malloc(sizeof(long));
-//     result[0] = acc;
-//     Column* new_col = (Column*) malloc(sizeof(Column));
-//     strcpy(new_col->name, leftvar);
-//     new_col->data = (int*)result;
-//     new_col->column_length = sizeof(long) / sizeof(int);
-//     new_col->type = LONG;
-
-//     store_client_variable(leftvar, new_col);
-//     return status;
-// }
 
 message_status col_math (char* args, char* leftvar, bool add){
     message_status status = OK_DONE;
@@ -238,35 +248,10 @@ message_status parse_fetch(char* args, char* leftvar){
     return status;
 }
 
-
-
-message_status parse_select(char* args, char* leftvar, DbOperator* dbo){ //For now, only supports 3-arg selects!! Needs to be updated to support either
-    message_status status = OK_WAIT_FOR_RESPONSE;
-    if(leftvar == NULL){
-        status = INCORRECT_FORMAT;
-        return status;
-    }
-    if(dbo == NULL){
-        status = EXECUTION_ERROR;
-        return status;
-    }
-        trim_parenthesis(args);
-
-    char** args_index = &args;
-    char* colname = next_token(args_index, &status);
-    char* lowval = next_token(args_index, &status);
-    char* highval = next_token(args_index, &status);
-    char* overflow = strsep(args_index, ",");
-    if(overflow != NULL){
-       status = INCORRECT_FORMAT; 
-    }
-    if(status == INCORRECT_FORMAT){
-        return status;
-    }
+message_status parse_reg_select(char* colname, char* lowval, char* highval, char* leftvar, DbOperator* dbo){
     Column* target_column = lookup_column(colname);
     if(target_column == NULL){
-        status = OBJECT_NOT_FOUND;
-        return status;
+        return OBJECT_NOT_FOUND;
     }
     dbo->operator_fields.select_operator.column = target_column;
     dbo->operator_fields.select_operator.lval = leftvar;
@@ -276,9 +261,36 @@ message_status parse_select(char* args, char* leftvar, DbOperator* dbo){ //For n
     dbo->operator_fields.select_operator.exists_upper = e_upper;
     dbo->operator_fields.select_operator.lower = (e_lower ? atoi(lowval): 0 );
     dbo->operator_fields.select_operator.upper = (e_upper ? atoi(highval): 0);
-
-    return status;
+    return OK_WAIT_FOR_RESPONSE;
 }
+
+
+message_status parse_select(char* args, char* leftvar, DbOperator* dbo){ //For now, only supports 3-arg selects!! Needs to be updated to support either
+    message_status status;
+    if(leftvar == NULL){
+        return INCORRECT_FORMAT;
+    }
+    if(dbo == NULL){
+        return EXECUTION_ERROR;
+    }
+    trim_parenthesis(args);
+
+    char** args_index = &args;
+    char* colname = next_token(args_index, &status);
+    char* lowval = next_token(args_index, &status);
+    char* highval = next_token(args_index, &status);
+    char* overflow = strsep(args_index, ",");
+    if(overflow != NULL){
+       return INCORRECT_FORMAT;
+    }
+    if(status == INCORRECT_FORMAT){
+        return status;
+    }
+
+    return parse_reg_select(colname, lowval, highval, leftvar, dbo);
+}
+
+
 
 message_status parse_create_col(char* create_arguments) {
     cs165_log(stdout, "Parsing CreateCol = %s\n", create_arguments);
