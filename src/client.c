@@ -159,12 +159,15 @@ Column* print_one(char* varname, int client_socket){
                     // }
 
                     if(ret->data == NULL){
+                        cs165_log(stdout, "mallocating to size: %i\n", recv_packet.length);
                         ret->data = (int*)malloc(recv_packet.length * sizeof(int));
                     } else{
-                        ret->data = (int*)realloc(ret->data, (ret->column_length + recv_packet.length) * sizeof(int));
-                    }
+                        ret->data = (int*)realloc(ret->data, (ret->column_length + recv_packet.length ) * sizeof(int));
+                        cs165_log(stdout, "reallocating to size: %i with ptr %p\n", (ret->column_length + recv_packet.length) , ret->data);
 
-                    memcpy(ret->data + (sizeof(int) * ret->column_length), recv_packet.payload, sizeof(int)*recv_packet.length);
+                    }
+                    cs165_log(stdout, "Writing to location %i, a total of %i ints. Pointer = %p\n", ret->column_length,recv_packet.length, ret->data + (sizeof(int) * ret->column_length));
+                    memcpy(ret->data + (ret->column_length), &recv_packet.payload, sizeof(int)*recv_packet.length);
                     ret->column_length += recv_packet.length;
                     ret->type = recv_packet.type;
 
