@@ -171,6 +171,7 @@ message_status serve_print(char* command, int client_socket){
     message send_message;
     message recv_message;
     print_packet send_packet;
+    memset(&send_packet, 0, sizeof(print_packet));
     size_t cur_pos = 0;
     size_t length;
 
@@ -199,7 +200,7 @@ message_status serve_print(char* command, int client_socket){
         }
         length = recv(client_socket, &recv_message, sizeof(message), 0);
         if(length == 0){
-            log_err("Failed to receive message.");
+            log_err("Failed to receive message. (aborting)\n");
             exit(1);        	
         }
         cs165_log(stdout, "recv length: %i\n", recv_message.length);
@@ -208,7 +209,7 @@ message_status serve_print(char* command, int client_socket){
         recv_buffer[recv_message.length]  = '\0';
         cs165_log(stdout, "Received: %s\n", recv_buffer);
         if(strcmp(recv_buffer, "OK") != 0){
-        	log_err("Corrupt message received during print!");
+        	log_err("Corrupt message received during print! (aborting)\n");
             exit(1);  
         }
         cur_pos += send_length;

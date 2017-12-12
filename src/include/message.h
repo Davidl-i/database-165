@@ -3,7 +3,7 @@
 #include "cs165_api.h"
 
 #define FILE_BUF_SIZE 500
-#define MAX_PAYLOAD_SIZE 2000
+#define MAX_PAYLOAD_SIZE 8000
 
 // mesage_status defines the status of the previous request.
 // FEEL FREE TO ADD YOUR OWN OR REMOVE ANY THAT ARE UNUSED IN YOUR PROJECT

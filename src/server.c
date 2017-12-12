@@ -30,10 +30,10 @@
 #include "utils.h"
 #include "client_context.h"
 
-#define MAX_WORKER_THREADS  3
-#define MAX_SHARE_PER_THREAD 2
+#define MAX_WORKER_THREADS  40
+#define MAX_SHARE_PER_THREAD 1
 #define RES_START_SIZE 1024
-#define RES_MULTIPLE 2
+#define RES_MULTIPLE 500
 
 
 void* select_worker(void* args){
@@ -52,7 +52,8 @@ void* select_worker(void* args){
         lvals[i] = query_buffer[i+start].operator_fields.select_operator.lval;
         res[i].column_max = RES_START_SIZE;
         res[i].column_length = 0;
-        res[i].data = (int*) malloc(sizeof(int)*RES_START_SIZE);
+        //res[i].data = (int*) malloc(sizeof(int)*RES_START_SIZE);
+        res[i].data = (int*) malloc(sizeof(int)*active->column_length);
         strcpy(res[i].name, lvals[i]);
         res[i].type = INT;
         exists_lower[i] = query_buffer[i+start].operator_fields.select_operator.exists_lower;
@@ -66,10 +67,10 @@ void* select_worker(void* args){
         for(size_t j = 0; j < num_share; j++){
             if( (exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j] && active->data[i] < upper[j]) || (exists_upper[j] && !exists_lower[j] && active->data[i] < upper[j]) ||  (!exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j]) ){
                 res[j].data[res[j].column_length++] = i;
-                if(res[j].column_length == res[j].column_max){
-                    res[j].data = realloc(res[j].data, sizeof(int) * (RES_MULTIPLE * res[j].column_max));
-                    res[j].column_max = res[j].column_max * RES_MULTIPLE;
-                }
+                // if(res[j].column_length == res[j].column_max){
+                //     res[j].data = realloc(res[j].data, sizeof(int) * (RES_MULTIPLE * res[j].column_max));
+                //     res[j].column_max = res[j].column_max * RES_MULTIPLE;
+                // }
             }            
         }
     }

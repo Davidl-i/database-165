@@ -297,6 +297,7 @@ message_status make_dbo_select_from(char* pos, char* assoc_vals, char* lowval, c
 
 message_status parse_select(char* args, char* leftvar, DbOperator* dbo){ //For now, only supports 3-arg selects!! Needs to be updated to support either
     message_status status;
+    memset(&status, 0 , sizeof(message_status));
     if(leftvar == NULL){
         return INCORRECT_FORMAT;
     }
@@ -483,6 +484,7 @@ message_status parse_create_db(char* create_arguments) {
 message_status parse_create(char* create_arguments) {
     cs165_log(stdout, "Parsing Create = %s\n", create_arguments);
     message_status mes_status;
+    memset(&mes_status, 0, sizeof(message_status));
     char *tokenizer_copy, *to_free;
     // Since strsep destroys input, we create a copy of our input. 
     tokenizer_copy = to_free = malloc((strlen(create_arguments)+1) * sizeof(char));

@@ -155,9 +155,11 @@ Status sync_db(Db* db){
 		char* tbl_file_to_open = (char*) malloc(sizeof(char) * (6+ strlen(db->name) + strlen(cur_table.name) ) );
 		snprintf(tbl_file_to_open, sizeof(char) * (6+ strlen(db->name) + strlen(cur_table.name) ) , "%s.%s.dat", db->name, cur_table.name);
 		cs165_log(stdout, "Opening Table file for writing: %s\n", tbl_file_to_open);
-		int tbl_fd = open(tbl_file_to_open, O_WRONLY | O_TRUNC | O_CREAT , 0666);
+		//int tbl_fd = open(tbl_file_to_open, O_WRONLY | O_TRUNC | O_CREAT , 0666);
+		FILE* table_file = fopen(tbl_file_to_open, "w");
+		
 		free(tbl_file_to_open);
-		if(tbl_fd < 0){
+		if(table_file == NULL){
 			close(db_fd);
 			ret_status.code = IO_ERROR;
 			ret_status.error_message = "Cannot open Table file to write to.";
@@ -167,23 +169,30 @@ Status sync_db(Db* db){
 			Column cur_col = cur_table.columns[j];
 			char* wb = (char*) malloc(sizeof(char) * (strlen(cur_col.name) + 3) );
 			snprintf(wb, sizeof(char) * (strlen(cur_col.name) + 3), ">%s\n", cur_col.name);
-			res = write(tbl_fd, wb, strlen(wb)); //Don't write the null terminator.
-			free(wb);
-			if(res < 0){
+			//res = write(tbl_fd, wb, strlen(wb)); //Don't write the null terminator.
+			res = fwrite(wb, sizeof(char), strlen(wb), table_file);
+			//if(res < 0){
+			if((size_t)res != strlen(wb)*sizeof(char)){
+				free(wb);
 				close(db_fd);
-				close(tbl_fd);
+				//close(tbl_fd);
+				fclose(table_file);
 				ret_status.code = IO_ERROR;
 				ret_status.error_message = "Cannot write to Tbl file\n";
 				return ret_status;
 			}
+			free(wb);
 			wb = (char*) calloc(20 , sizeof(char));
 			for(size_t k = 0; k < cur_table.table_length; k++){
 				snprintf(wb, 20, "%i\n", cur_col.data[k]);
-				res = write(tbl_fd, wb, strlen(wb));
-				if(res < 0){
+				//res = write(tbl_fd, wb, strlen(wb));
+				res = fwrite(wb, sizeof(char), strlen(wb), table_file);
+				//if(res < 0){
+				if((size_t)res != strlen(wb)*sizeof(char)){
 					free(wb);
 					close(db_fd);
-					close(tbl_fd);
+					//close(tbl_fd);
+					fclose(table_file);
 					ret_status.code = IO_ERROR;
 					ret_status.error_message = "Cannot write an int to the Tbl file\n";
 					return ret_status;
@@ -191,7 +200,8 @@ Status sync_db(Db* db){
 			}
 			free(wb);
 		}
-		close(tbl_fd);
+		//close(tbl_fd);
+		fclose(table_file);
 	}
 	close(db_fd);
 	ret_status.code = OK;

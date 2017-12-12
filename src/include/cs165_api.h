@@ -32,8 +32,9 @@ SOFTWARE.
 // Limits the size of a name in our database to 64 characters
 #define MAX_SIZE_NAME 64
 #define HANDLE_MAX_SIZE 64
-#define PAGE_SIZE 4048
-#define COL_INCREMENT 10
+
+#define PAGE_SIZE 4096
+#define COL_INCREMENT 10000 //When loading from client, how much to resize column each go
 
 /**
  * EXTRA
