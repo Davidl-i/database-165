@@ -54,6 +54,7 @@ typedef enum DataType {
 struct Comparator;
 //struct ColumnIndex;
 
+
 typedef struct Column {
     char name[MAX_SIZE_NAME]; 
     int* data;
@@ -65,6 +66,17 @@ typedef struct Column {
     //struct ColumnIndex *index;
     //bool clustered;
 } Column;
+
+typedef struct JoinArgs{
+    size_t start;
+    size_t end;
+    Column* outer_val;
+    Column* outer_pos;
+    Column* inner_val;
+    Column* inner_pos;
+    Column* outer_ret;
+    Column* inner_ret;
+} JoinArgs;
 
 
 /**
@@ -219,6 +231,7 @@ typedef enum OperatorType {
     SELECT,
     FETCH,
     RUN_BATCH,
+    JOIN,
     NONE,
 } OperatorType;
 
@@ -231,6 +244,15 @@ typedef struct SelectOperator{
     Column* assoc_pos;
     char* lval;
 } SelectOperator;
+
+typedef struct JoinOperator{
+    Column* pos1;
+    Column* val1;
+    Column* pos2;
+    Column* val2;
+    char* sto_pos1;
+    char* sto_pos2;
+} JoinOperator;
 
 /*
  * necessary fields for insertion
@@ -252,6 +274,7 @@ typedef union OperatorFields {
     InsertOperator insert_operator;
     OpenOperator open_operator;
     SelectOperator select_operator;
+    JoinOperator join_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:

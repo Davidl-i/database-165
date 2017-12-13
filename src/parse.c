@@ -274,7 +274,7 @@ message_status make_dbo_select_from(char* pos, char* assoc_vals, char* lowval, c
         return OBJECT_NOT_FOUND;
     }
     Column* assoc_pos = lookup_client_context(pos);
-    if(target_column == NULL){
+    if(assoc_pos == NULL){
         return OBJECT_NOT_FOUND;
     }
     if(target_column->column_length != assoc_pos->column_length){
@@ -327,6 +327,73 @@ message_status parse_select(char* args, char* leftvar, DbOperator* dbo){ //For n
 
     return make_dbo_reg_select(first_arg, second_arg, third_arg, leftvar, dbo);
 }
+
+//out_pos1,out_pos2=join(val1,pos1,val2,pos2,<method>)
+message_status parse_join(char* args, char* leftvar, DbOperator* dbo){ 
+    message_status status;
+    memset(&status, 0 , sizeof(message_status));
+    if(leftvar == NULL){
+        return INCORRECT_FORMAT;
+    }
+    if(dbo == NULL){
+        return EXECUTION_ERROR;
+    }
+    trim_parenthesis(args);
+
+    char** args_index = &args;
+    char* first_arg = next_token(args_index, &status);
+    char* second_arg = next_token(args_index, &status);
+    char* third_arg = next_token(args_index, &status);
+    char* fourth_arg = next_token(args_index, &status);
+    //Ignore method.
+    if(status == INCORRECT_FORMAT){
+        return status;
+    }
+    char** lval_index = &leftvar;
+    char* first_lval = next_token(lval_index, &status);
+    char* second_lval = next_token(lval_index, &status);
+
+    if(status == INCORRECT_FORMAT){
+        return status;
+    }
+
+    Column* target_pos1 = lookup_client_context(second_arg);
+    if(target_pos1 == NULL){
+        return OBJECT_NOT_FOUND;
+    }
+    Column* target_val1 = lookup_client_context(first_arg);
+    if(target_val1 == NULL){
+        return OBJECT_NOT_FOUND;
+    }
+    if(target_pos1->column_length != target_val1->column_length){
+        log_err("(operands 1) Join operands of position and val are not of the same length!");
+        return EXECUTION_ERROR;
+    }
+    Column* target_pos2 = lookup_client_context(fourth_arg);
+    if(target_pos2 == NULL){
+        return OBJECT_NOT_FOUND;
+    }
+    Column* target_val2 = lookup_client_context(third_arg);
+    if(target_val2 == NULL){
+        return OBJECT_NOT_FOUND;
+    }
+    if(target_pos2->column_length != target_val2->column_length){
+        log_err("(operands 2) Join operands of position and val are not of the same length!");
+        return EXECUTION_ERROR;
+    }
+    dbo->operator_fields.join_operator.pos1 = target_pos1;
+    dbo->operator_fields.join_operator.val1 = target_val1;
+    dbo->operator_fields.join_operator.pos2 = target_pos2;
+    dbo->operator_fields.join_operator.val2 = target_val2;
+
+
+    dbo->operator_fields.join_operator.sto_pos1 = (char*) malloc(sizeof(char)*(strlen(first_lval) + 1) );
+    strcpy(dbo->operator_fields.join_operator.sto_pos1, first_lval);
+    dbo->operator_fields.join_operator.sto_pos2 = (char*) malloc(sizeof(char)*(strlen(second_lval) + 1) );
+    strcpy(dbo->operator_fields.join_operator.sto_pos2, second_lval);
+    return OK_WAIT_FOR_RESPONSE;
+}
+
 
 message_status start_batch(){
     if(query_capture_state){
@@ -750,7 +817,12 @@ DbOperator* parse_command(char* query_command, message* send_message, int client
         send_message->status = end_batch();
         dbo = malloc(sizeof(DbOperator));
         dbo->type = RUN_BATCH;
-    }
+    } else if (strncmp(query_command, "join", 4) == 0) {
+        query_command += 4;
+        dbo = malloc(sizeof(DbOperator));
+        send_message->status = parse_join(query_command, handle, dbo);
+        dbo->type = JOIN;
+    } 
     if (dbo == NULL) {
         return dbo;
     }

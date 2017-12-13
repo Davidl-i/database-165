@@ -32,61 +32,70 @@
 #include "utils.h"
 #include "client_context.h"
 
+#define DIV_UP(x,y) ((x + y - 1)/y)
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+
 #define MAX_WORKER_THREADS  4
 #define MAX_SHARE_PER_THREAD 10
-#define RES_START_SIZE 1024     //meant only for dynamically sized results
-#define RES_MULTIPLE 500        //only for dynamically sized results
+#define JOIN_VECTOR_SIZE 4000  //Number of ints per vector. (32k instruction L1 cache, shared by 2 threads = 16k. 16k/sizeof(int) = 4000)
+
+//#define NAIVE_BATCH 1
+#define MULTICORE_BATCH 1
+
+//#define NAIVE_JOIN 1 //Use the naive join method
+//#define VECTOR_JOIN 1//Use vectorized processing
+#define FOUR_THREAD_JOIN 1 //Use 4 cores to join
 
 
-void* select_worker(void* args){
-    size_t start = ((int*)args)[0];
-    size_t end = ((int*)args)[1];
-    size_t num_share = end-start;
-    cs165_log(stdout, "I am in charge of doing %i through %i!\n", start, end-1);
-    Column* active = query_buffer[start].operator_fields.select_operator.column;
-    Column res[num_share];
-    bool exists_lower[num_share];
-    bool exists_upper[num_share];
-    int lower[num_share];
-    int upper[num_share];
-    char* lvals[num_share];
-    for(size_t i = 0; i < num_share; i++){
-        lvals[i] = query_buffer[i+start].operator_fields.select_operator.lval;
-        res[i].column_max = RES_START_SIZE;
-        res[i].column_length = 0;
-        //res[i].data = (int*) malloc(sizeof(int)*RES_START_SIZE);
-        res[i].data = (int*) malloc(sizeof(int)*active->column_length);
-        strcpy(res[i].name, lvals[i]);
-        res[i].type = INT;
-        exists_lower[i] = query_buffer[i+start].operator_fields.select_operator.exists_lower;
-        exists_upper[i] = query_buffer[i+start].operator_fields.select_operator.exists_upper;
-        lower[i] = query_buffer[i+start].operator_fields.select_operator.lower;
-        upper[i] = query_buffer[i+start].operator_fields.select_operator.upper;
-    }
+// void* select_worker(void* args){
+//     size_t start = ((int*)args)[0];
+//     size_t end = ((int*)args)[1];
+//     size_t num_share = end-start;
+//     cs165_log(stdout, "I am in charge of doing %i through %i!\n", start, end-1);
+//     Column* active = query_buffer[start].operator_fields.select_operator.column;
+//     Column res[num_share];
+//     bool exists_lower[num_share];
+//     bool exists_upper[num_share];
+//     int lower[num_share];
+//     int upper[num_share];
+//     char* lvals[num_share];
+//     for(size_t i = 0; i < num_share; i++){
+//         lvals[i] = query_buffer[i+start].operator_fields.select_operator.lval;
+//         res[i].column_max = RES_START_SIZE;
+//         res[i].column_length = 0;
+//         //res[i].data = (int*) malloc(sizeof(int)*RES_START_SIZE);
+//         res[i].data = (int*) malloc(sizeof(int)*active->column_length);
+//         strcpy(res[i].name, lvals[i]);
+//         res[i].type = INT;
+//         exists_lower[i] = query_buffer[i+start].operator_fields.select_operator.exists_lower;
+//         exists_upper[i] = query_buffer[i+start].operator_fields.select_operator.exists_upper;
+//         lower[i] = query_buffer[i+start].operator_fields.select_operator.lower;
+//         upper[i] = query_buffer[i+start].operator_fields.select_operator.upper;
+//     }
 
 
-    for(size_t i = 0; i < active->column_length; i++){
-        for(size_t j = 0; j < num_share; j++){
-            if( (exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j] && active->data[i] < upper[j]) || (exists_upper[j] && !exists_lower[j] && active->data[i] < upper[j]) ||  (!exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j]) ){
-                res[j].data[res[j].column_length++] = i;
-                // if(res[j].column_length == res[j].column_max){
-                //     res[j].data = realloc(res[j].data, sizeof(int) * (RES_MULTIPLE * res[j].column_max));
-                //     res[j].column_max = res[j].column_max * RES_MULTIPLE;
-                // }
-            }            
-        }
-    }
+//     for(size_t i = 0; i < active->column_length; i++){
+//         for(size_t j = 0; j < num_share; j++){
+//             if( (exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j] && active->data[i] < upper[j]) || (exists_upper[j] && !exists_lower[j] && active->data[i] < upper[j]) ||  (!exists_upper[j] && exists_lower[j] && active->data[i] >= lower[j]) ){
+//                 res[j].data[res[j].column_length++] = i;
+//                 // if(res[j].column_length == res[j].column_max){
+//                 //     res[j].data = realloc(res[j].data, sizeof(int) * (RES_MULTIPLE * res[j].column_max));
+//                 //     res[j].column_max = res[j].column_max * RES_MULTIPLE;
+//                 // }
+//             }            
+//         }
+//     }
 
-    for(size_t i = 0; i < num_share; i++){
-        Column* to_store = (Column*)malloc(sizeof(Column));
-        memcpy(to_store, &res[i], sizeof(Column));
-        to_store->data = realloc(to_store->data, sizeof(int)*to_store->column_length);
-        to_store->column_max = to_store->column_length;
-        store_client_variable(lvals[i], to_store);
-    }
+//     for(size_t i = 0; i < num_share; i++){
+//         Column* to_store = (Column*)malloc(sizeof(Column));
+//         memcpy(to_store, &res[i], sizeof(Column));
+//         to_store->data = realloc(to_store->data, sizeof(int)*to_store->column_length);
+//         to_store->column_max = to_store->column_length;
+//         store_client_variable(lvals[i], to_store);
+//     }
 
-    return NULL;
-}
+//     return NULL;
+// }
 
 //void share_scan(size_t start, size_t end){
 void* share_scan(void* args){
@@ -103,7 +112,7 @@ void* share_scan(void* args){
     char* lvals[num_share];
     for(size_t i = 0; i < num_share; i++){
         lvals[i] = query_buffer[i+start].operator_fields.select_operator.lval;
-        res[i].column_max = RES_START_SIZE;
+        res[i].column_max = active->column_length;
         res[i].column_length = 0;
         res[i].data = (int*) malloc(sizeof(int)*active->column_length);
         strcpy(res[i].name, lvals[i]);
@@ -140,6 +149,27 @@ void* share_scan(void* args){
     return NULL;
 }
 
+void* join_worker(void* args){
+    JoinArgs* real_args = (JoinArgs*) args;
+    size_t start = real_args->start;
+    size_t end = real_args->end;
+    Column* outer_val =real_args->outer_val;
+    Column* outer_pos =real_args->outer_pos;
+    Column* inner_val =real_args->inner_val;
+    Column* inner_pos =real_args->inner_pos;
+    Column* outer_ret =real_args->outer_ret;
+    Column* inner_ret =real_args->inner_ret;
+    for(size_t i = start; i < end; i++){
+        for(size_t j = 0; j < inner_val->column_length; j++){
+            if(outer_val->data[i] == inner_val->data[j]){
+                outer_ret->data[outer_ret->column_length++] = outer_pos->data[i];
+                inner_ret->data[inner_ret->column_length++] = inner_pos->data[j];
+            }
+        }
+    }
+    return NULL;
+}
+
 /** execute_DbOperator takes as input the DbOperator and executes the query.
  * This should be replaced in your implementation (and its implementation possibly moved to a different file).
  * It is currently here so that you can verify that your server and client can send messages.
@@ -172,14 +202,6 @@ char* execute_DbOperator(DbOperator* query) {
             table->columns[i].column_length ++;
             cs165_log(stdout,"inserted: %i into col: %s. This column now has %i elements\n", values[i], table->columns[i].name, table->columns[i].column_length);
         }
-// #ifdef LOG //Don't waste time if not logging
-//         for(size_t i = 0; i < table->col_count; i++){
-//             cs165_log(stdout, "Col: %s\n", table->columns[i].name);
-//             for(size_t j = 0; j < table->table_length; j++){
-//                 cs165_log(stdout, "%i\n", table->columns[i].data[j]);
-//             }
-//         }
-// #endif
         db_operator_free(query);  
         return "Done";
     }
@@ -245,18 +267,15 @@ char* execute_DbOperator(DbOperator* query) {
 
     if(query->type == RUN_BATCH){
         cs165_log(stdout, "Starting batch run..\n");
-        // for(size_t i = 0; i < query_buffer_count; i++){
-        //     DbOperator* new_query = (DbOperator*) malloc(sizeof(DbOperator));
-        //     memcpy(new_query, &(query_buffer[i]), sizeof(DbOperator));
-        //     char* res = execute_DbOperator(new_query);
-        //     cs165_log(stdout, "output from exec: %s\n", res);
-        // }
-
-
-
-#define DIV_UP(x,y) ((x + y - 1)/y)
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
-
+#ifdef NAIVE_BATCH
+        for(size_t i = 0; i < query_buffer_count; i++){
+            DbOperator* new_query = (DbOperator*) malloc(sizeof(DbOperator));
+            memcpy(new_query, &(query_buffer[i]), sizeof(DbOperator));
+            char* res = execute_DbOperator(new_query);
+            cs165_log(stdout, "output from exec: %s\n", res);
+        }
+#endif
+#ifdef MULTICORE_BATCH
         size_t cur_task = 0;
         while(cur_task < query_buffer_count){
             size_t needed_worker_threads = MIN(MAX_WORKER_THREADS, DIV_UP((query_buffer_count-cur_task),MAX_SHARE_PER_THREAD));
@@ -283,9 +302,143 @@ char* execute_DbOperator(DbOperator* query) {
             }
 
         }
-
+#endif
         db_operator_free(query);  
         return "All Done";
+    }
+
+    if(query->type == JOIN){
+        Column* pos1 = query->operator_fields.join_operator.pos1;
+        Column* val1 = query->operator_fields.join_operator.val1;
+        Column* pos2 = query->operator_fields.join_operator.pos2;
+        Column* val2 = query->operator_fields.join_operator.val2;
+        char* sto_pos1 = query->operator_fields.join_operator.sto_pos1;
+        char* sto_pos2 = query->operator_fields.join_operator.sto_pos2;
+        cs165_log(stdout, "val1 is %s, pos1 is %s, val2 is %s, pos2 is %s\n" ,val1->name,pos1->name, val2->name, pos2->name);
+        cs165_log(stdout, "store 1 is %s, store 2 is %s\n", sto_pos1, sto_pos2);
+        Column* res1 = (Column*) malloc(sizeof(Column));
+        Column* res2 = (Column*) malloc(sizeof(Column));
+        strcpy(res1->name, sto_pos1);
+        strcpy(res2->name, sto_pos2);
+        res1->column_length = 0;
+        res2->column_length = 0;
+        res1->type = INT;
+        res2->type = INT;
+        res1->index = NULL;
+        res2->index = NULL;
+        res1->column_max = MIN(pos1->column_length, pos2->column_length);
+        res2->column_max = res1->column_max;
+        res1->data = (int*) malloc(sizeof(int) * res1->column_max);
+        res2->data = (int*) malloc(sizeof(int) * res2->column_max);
+
+#ifdef NAIVE_JOIN
+        for(size_t i = 0; i < val1->column_length; i++){
+            for(size_t j = 0; j < val2->column_length; j++){
+                if(val1->data[i] == val2->data[j]){
+                    res1->data[res1->column_length++] = pos1->data[i];
+                    res2->data[res2->column_length++] = pos2->data[j];
+                }
+            }
+        }
+#endif
+#ifdef VECTOR_JOIN
+        size_t v1cl = val1->column_length;
+        size_t v2cl = val2->column_length;
+        for(size_t vctr_strt = 0; vctr_strt < v1cl; vctr_strt += JOIN_VECTOR_SIZE){
+            size_t upper_limit = MIN(v1cl, vctr_strt + JOIN_VECTOR_SIZE);
+            for(size_t j = 0; j < v2cl; j++){
+                for(size_t i = vctr_strt; i < upper_limit; i++){
+                    if(val1->data[i] == val2->data[j]){
+                        res1->data[res1->column_length++] = pos1->data[i];
+                        res2->data[res2->column_length++] = pos2->data[j];
+                    }                    
+                }
+            }
+
+        }
+#endif
+#ifdef FOUR_THREAD_JOIN
+        size_t first_start = 0;
+        size_t third_start = val1->column_length / 2;
+        size_t second_start = third_start / 2;
+        size_t fourth_start = third_start + (val1->column_length-second_start)/2;
+        cs165_log(stdout, "first: %i, second %i, third %i, fourth %i\n", first_start, second_start, third_start, fourth_start);
+
+        Column first_res_outer;
+        Column first_res_inner;
+        Column second_res_outer;
+        Column second_res_inner;
+        Column third_res_outer;
+        Column third_res_inner;
+        Column fourt_res_outer;
+        Column fourt_res_inner;
+        memset(&first_res_outer, 0, sizeof(Column));
+        memset(&first_res_inner, 0, sizeof(Column));
+        memset(&second_res_outer, 0, sizeof(Column));
+        memset(&second_res_inner, 0, sizeof(Column));
+        memset(&third_res_outer, 0, sizeof(Column));
+        memset(&third_res_inner, 0, sizeof(Column));
+        memset(&fourt_res_outer, 0, sizeof(Column));
+        memset(&fourt_res_inner, 0, sizeof(Column));
+        first_res_outer.data = (int*) malloc(sizeof(int) * (MIN(val2->column_length,second_start-first_start)) );
+        first_res_inner.data = (int*) malloc(sizeof(int) * (MIN(val2->column_length,second_start-first_start)) );
+        second_res_outer.data = (int*) malloc(sizeof(int) * (MIN(val2->column_length,third_start-second_start)) );
+        second_res_inner.data = (int*) malloc(sizeof(int) * (MIN(val2->column_length,third_start-second_start)) );
+        third_res_outer.data = (int*) malloc(sizeof(int) * (MIN(val2->column_length,fourth_start-third_start)) );
+        third_res_inner.data = (int*) malloc(sizeof(int) * (MIN(val2->column_length,fourth_start-third_start)) );
+        fourt_res_outer.data = (int*) malloc(sizeof(int) * (MIN(val2->column_length,val1->column_length-fourth_start)) );
+        fourt_res_inner.data = (int*) malloc(sizeof(int) * (MIN(val2->column_length,val1->column_length-fourth_start)) );
+
+        JoinArgs args1 = {.start=first_start,.end=second_start,.outer_val=val1,.outer_pos=pos1,.inner_val=val2,.inner_pos=pos2,.outer_ret=&first_res_outer,.inner_ret=&first_res_inner,};
+        JoinArgs args2 = {.start=second_start,.end=third_start,.outer_val=val1,.outer_pos=pos1,.inner_val=val2,.inner_pos=pos2,.outer_ret=&second_res_outer,.inner_ret=&second_res_inner,};
+        JoinArgs args3 = {.start=third_start,.end=fourth_start,.outer_val=val1,.outer_pos=pos1,.inner_val=val2,.inner_pos=pos2,.outer_ret=&third_res_outer,.inner_ret=&third_res_inner,};
+        JoinArgs args4 = {.start=fourth_start,.end=val1->column_length,.outer_val=val1,.outer_pos=pos1,.inner_val=val2,.inner_pos=pos2,.outer_ret=&fourt_res_outer,.inner_ret=&fourt_res_inner,};
+
+        pthread_t threads[4];
+        pthread_create(&(threads[0]), NULL, join_worker, &(args1));
+        pthread_create(&(threads[1]), NULL, join_worker, &(args2));
+        pthread_create(&(threads[2]), NULL, join_worker, &(args3));
+        pthread_create(&(threads[3]), NULL, join_worker, &(args4));
+        (void) pthread_join(threads[0], NULL);
+        (void) pthread_join(threads[1], NULL);
+        (void) pthread_join(threads[2], NULL);
+        (void) pthread_join(threads[3], NULL);
+
+        memcpy(res1->data + res1->column_length, first_res_outer.data, sizeof(int) * first_res_outer.column_length);
+        res1->column_length+=first_res_outer.column_length;
+        memcpy(res1->data + res1->column_length, second_res_outer.data, sizeof(int) * second_res_outer.column_length);
+        res1->column_length+=second_res_outer.column_length;
+        memcpy(res1->data + res1->column_length, third_res_outer.data, sizeof(int) * third_res_outer.column_length);
+        res1->column_length+=third_res_outer.column_length;
+        memcpy(res1->data + res1->column_length, fourt_res_outer.data, sizeof(int) * fourt_res_outer.column_length);
+        res1->column_length+=fourt_res_outer.column_length;
+
+        memcpy(res2->data + res2->column_length, first_res_inner.data, sizeof(int) * first_res_inner.column_length);
+        res2->column_length+=first_res_inner.column_length;
+        memcpy(res2->data + res2->column_length, second_res_inner.data, sizeof(int) * second_res_inner.column_length);
+        res2->column_length+=second_res_inner.column_length;
+        memcpy(res2->data + res2->column_length, third_res_inner.data, sizeof(int) * third_res_inner.column_length);
+        res2->column_length+=third_res_inner.column_length;
+        memcpy(res2->data + res2->column_length, fourt_res_inner.data, sizeof(int) * fourt_res_inner.column_length);
+        res2->column_length+=fourt_res_inner.column_length;
+
+        free(first_res_outer.data);
+        free(first_res_inner.data);
+        free(second_res_outer.data);
+        free(second_res_inner.data);
+        free(third_res_outer.data);
+        free(third_res_inner.data);
+        free(fourt_res_outer.data);
+        free(fourt_res_inner.data);
+
+#endif
+
+        res1->data = realloc(res1->data, sizeof(int) * res1->column_length);
+        res2->data = realloc(res2->data, sizeof(int) * res2->column_length);
+        store_client_variable(sto_pos1, res1);
+        store_client_variable(sto_pos2, res2);
+        db_operator_free(query);
+        return "Done";
     }
 
 //     if(query->type == RUN_BATCH){
@@ -527,6 +680,10 @@ void db_operator_free(DbOperator* query){
             break;
         case SELECT:
             free(query->operator_fields.select_operator.lval);
+            break;
+        case JOIN:
+            free(query->operator_fields.join_operator.sto_pos1);
+            free(query->operator_fields.join_operator.sto_pos2);
             break;
         default:
             break;
