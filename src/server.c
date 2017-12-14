@@ -35,9 +35,9 @@
 #define DIV_UP(x,y) ((x + y - 1)/y)
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-#define MAX_WORKER_THREADS  4
-#define MAX_SHARE_PER_THREAD 10
-#define JOIN_VECTOR_SIZE 4000  //Number of ints per vector. (32k instruction L1 cache, shared by 2 threads = 16k. 16k/sizeof(int) = 4000)
+#define MAX_WORKER_THREADS  3
+#define MAX_SHARE_PER_THREAD 15
+#define JOIN_VECTOR_SIZE 2000  //Number of ints per vector. (32k instruction L1 cache, shared by 2 threads = 16k. 16k/sizeof(int) = 4000)
 
 //#define NAIVE_BATCH 1
 #define MULTICORE_BATCH 1

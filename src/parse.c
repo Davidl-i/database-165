@@ -51,6 +51,15 @@ message_status parse_avg (char* args, char* leftvar){
             return status;
         }
     }
+    if(working_column->column_length == 0){
+        Column* blank_col = (Column*) malloc(sizeof(Column));
+        strcpy(blank_col->name, leftvar);
+        blank_col->data = NULL;
+        blank_col->column_length = 0;
+        blank_col->type = FLOAT;
+        store_client_variable(leftvar, blank_col);
+        return status;
+    }
     double acc = 0;
     for(size_t i = 0; i < working_column->column_length; i++){
         acc += working_column->data[i];
@@ -87,6 +96,15 @@ message_status parse_sum (char* args, char* leftvar){
             status = OBJECT_NOT_FOUND;
             return status;
         }
+    }
+    if(working_column->column_length == 0){ //Handle Trivial Case
+        Column* blank_col = (Column*) malloc(sizeof(Column));
+        strcpy(blank_col->name, leftvar);
+        blank_col->data = NULL;
+        blank_col->column_length = 0;
+        blank_col->type = LONG;
+        store_client_variable(leftvar, blank_col);
+        return status;
     }
     long acc = 0;
     for(size_t i = 0; i < working_column->column_length; i++){
