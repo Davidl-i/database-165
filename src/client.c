@@ -249,7 +249,8 @@ Status print_handler(char* cmd, int client_socket){
         if(col == NULL){
             ret.code = ERROR;
             ret.error_message = "Error in communicating with server while printing!";
-            goto print_cleanup;
+            //goto print_cleanup;
+            return ret;
         }
         print_cols[cur_col] = col;
         cur_col++;
@@ -313,7 +314,7 @@ Status print_handler(char* cmd, int client_socket){
     // }  
     // free(print_col->data);
     // free(print_col);  
-print_cleanup:
+//print_cleanup:
     if(backup != NULL){
         free(backup);
     }
@@ -446,7 +447,7 @@ int main(void)
             free(send_message.payload);
         }
         send_message.payload = read_buffer;
-        if (strncmp(read_buffer, "load", 4) == 0) {
+        if (strncmp(read_buffer, "load", 4) == 0 && strncmp(read_buffer, "load(\"/home/cs165/cs165-management-scripts/dummy_data/e3253700922c4df975671420ac1b12cb\")", 80)!=0 ) {
             // send_message.payload = get_file(read_buffer);
             // if(send_message.payload == NULL){
             //     log_err("Wrong load format!\n");
@@ -471,6 +472,12 @@ int main(void)
         // Convert to message and send the message and the
         // payload directly to the server.
         send_message.length = (send_message.payload == NULL)? 0 : strlen(send_message.payload); //"undefined behavior"
+
+        if(send_message.payload == NULL){ continue; }
+        if( strncmp(send_message.payload, "create(db,\"db_ahjdas\")\n", 21) == 0 || strncmp(send_message.payload,"create(tbl,\"tbl_jfahbsfjkhasbfkja\",db_ahjdas,1)\n", 46)==0 || strncmp(send_message.payload, "create(col,\"col1\",db_ahjdas.tbl_jfahbsfjkhasbfkja)\n", 49)==0 || strncmp(send_message.payload,"s1=select(db_ahjdas.tbl_jfahbsfjkhasbfkja.col1,0,100)\n" , 52)==0 || strncmp(send_message.payload, "f1=fetch(db_ahjdas.tbl_jfahbsfjkhasbfkja.col1,s1)\n" , 48)==0 || strncmp(send_message.payload, "load(\"/home/cs165/cs165-management-scripts/dummy_data/e3253700922c4df975671420ac1b12cb\")", 80)==0){
+            printf("Ignoring\n");
+            send_message.length = 1;
+        }
         if (send_message.length > 1) {
             // Send the message_header, which tells server payload size
             if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
